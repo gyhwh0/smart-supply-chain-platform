@@ -41,6 +41,7 @@ const routes = [
 const router = createRouter({ history: createWebHistory(), routes })
 let defaultAdminChecked = false
 const tryDefaultAdmin = async () => {
+  if (getToken()) return false
   if (defaultAdminChecked) return false
   defaultAdminChecked = true
   try {
