@@ -1427,10 +1427,6 @@ def order_output(order: PurchaseOrder):
             "amount": round(float(item.quantity * item.unit_price), 2),
             "is_best_price": item.is_best_price,
             "remark": item.remark,
-            "delivered_quantity": float(item.delivered_quantity) if item.delivered_quantity is not None else None,
-            "accepted_quantity": float(item.accepted_quantity) if item.accepted_quantity is not None else None,
-            "acceptance_variance_reason": item.acceptance_variance_reason,
-            "cost_unit_price": float(item.cost_unit_price) if item.cost_unit_price is not None else None,
         }
         for item in order.items
     ]
@@ -1449,11 +1445,6 @@ def order_output(order: PurchaseOrder):
         "creator_name": order.creator.name,
         "items": items,
         "total_amount": round(sum(item["amount"] for item in items), 2),
-        "supplement_amount": float(order.supplement_amount or 0),
-        "invoice_amount": float(order.invoice_amount or 0),
-        "invoice_date": order.invoice_date,
-        "acceptance_status": order.acceptance_status or "pending",
-        "accepted_at": order.accepted_at,
     }
 
 
