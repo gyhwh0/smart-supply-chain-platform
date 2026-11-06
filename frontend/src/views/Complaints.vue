@@ -122,10 +122,10 @@
           ><template #default="s"
             ><el-tag>{{ statusLabel(s.row.status) }}</el-tag></template
           ></el-table-column
-        ><el-table-column label="操作" width="100"
+        ><el-table-column label="操作" width="150"
           ><template #default="s"
             ><el-button link type="primary" @click="open(s.row)"
-              >处理</el-button
+              >编辑</el-button><el-button link type="danger" @click="remove(s.row)">删除</el-button
             ></template
           ></el-table-column
         ></el-table
@@ -133,19 +133,10 @@
     </el-card>
     <el-dialog
       v-model="visible"
-      :title="creating ? '新增投诉' : `处理投诉 · ${form.complaint_no}`"
+      :title="creating ? '新增投诉' : `编辑投诉 · ${form.complaint_no}`"
       width="650px"
-      ><el-descriptions v-if="!creating" :column="2" border
-        ><el-descriptions-item label="客户">{{
-          form.customer_name
-        }}</el-descriptions-item
-        ><el-descriptions-item label="分类"
-          >{{ form.category }} / {{ form.severity }}</el-descriptions-item
-        ><el-descriptions-item label="原始内容" :span="2">{{
-          form.content
-        }}</el-descriptions-item></el-descriptions
-      ><el-form label-width="95px" style="margin-top: 18px"
-        ><template v-if="creating"><el-form-item label="投诉客户" required><el-select v-model="form.customer_id" filterable style="width:100%"><el-option v-for="item in options.customers" :key="item.id" :label="`${item.customer_code || '无编号'} · ${item.name}`" :value="item.id"/></el-select></el-form-item><el-form-item label="投诉分类" required><el-select v-model="form.category" style="width:100%"><el-option v-for="item in categories" :key="item" :label="item" :value="item"/></el-select></el-form-item><el-form-item label="投诉等级" required><el-radio-group v-model="form.severity"><el-radio-button value="P0">P0 紧急</el-radio-button><el-radio-button value="P1">P1 重要</el-radio-button><el-radio-button value="P2">P2 普通</el-radio-button></el-radio-group></el-form-item><el-form-item label="投诉内容" required><el-input v-model="form.content" type="textarea" :rows="5" placeholder="请填写客户反馈的问题、涉及商品和发生情况"/></el-form-item></template
+      ><el-form label-width="95px"
+        ><el-form-item label="投诉客户" required><el-select v-model="form.customer_id" filterable style="width:100%"><el-option v-for="item in options.customers" :key="item.id" :label="`${item.customer_code || '无编号'} · ${item.name}`" :value="item.id"/></el-select></el-form-item><el-form-item label="投诉分类" required><el-select v-model="form.category" style="width:100%"><el-option v-for="item in categories" :key="item" :label="item" :value="item"/></el-select></el-form-item><el-form-item label="投诉等级" required><el-radio-group v-model="form.severity"><el-radio-button value="P0">P0 紧急</el-radio-button><el-radio-button value="P1">P1 重要</el-radio-button><el-radio-button value="P2">P2 普通</el-radio-button></el-radio-group></el-form-item><el-form-item label="投诉内容" required><el-input v-model="form.content" type="textarea" :rows="5" placeholder="请填写客户反馈的问题、涉及商品和发生情况"/></el-form-item
         ><el-form-item label="处理人"
           ><el-select v-model="form.assigned_to" clearable style="width: 100%"
             ><el-option
@@ -177,8 +168,8 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from "vue";
-import { ElMessage } from "element-plus";
-import { createComplaint, getComplaints, getComplaintSummary, getWeComOptions, updateComplaint } from "@/api";
+import { ElMessage, ElMessageBox } from "element-plus";
+import { createComplaint, deleteComplaint, getComplaints, getComplaintSummary, getWeComOptions, updateComplaint } from "@/api";
 const today = () => new Date().toLocaleDateString("sv-SE");
 const rows = ref([]),
   visible = ref(false),
@@ -234,6 +225,10 @@ const save = async () => {
   } else {
   await updateComplaint(form.id, {
     status: form.status,
+    customer_id: form.customer_id,
+    category: form.category,
+    severity: form.severity,
+    content: form.content?.trim(),
     assigned_to: form.assigned_to,
     resolution: form.resolution || null,
   });
@@ -242,6 +237,15 @@ const save = async () => {
   visible.value = false;
   await load();
   window.dispatchEvent(new CustomEvent("attention-updated"));
+  window.dispatchEvent(new CustomEvent("business-data-updated", { detail: { module: "complaints", action: creating.value ? "create" : "update" } }));
+};
+const remove = async row => {
+  await ElMessageBox.confirm(`确认删除投诉 ${row.complaint_no}？删除后无法恢复。`, "删除投诉", { type: "warning" });
+  const result = await deleteComplaint(row.id);
+  ElMessage.success(result.message);
+  await load();
+  window.dispatchEvent(new CustomEvent("attention-updated"));
+  window.dispatchEvent(new CustomEvent("business-data-updated", { detail: { module: "complaints", action: "delete", id: row.id } }));
 };
 onMounted(async () => {
   Object.assign(options, await getWeComOptions());

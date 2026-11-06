@@ -46,12 +46,12 @@
         <el-table-column label="销售金额" width="130"><template #default="scope"><b class="amount">¥{{ money(scope.row.total_amount) }}</b></template></el-table-column>
         <el-table-column label="状态" width="110"><template #default="scope"><el-tag :type="scope.row.status === 'confirmed' ? 'success' : 'warning'">{{ scope.row.status === 'confirmed' ? '已确认' : '待确认' }}</el-tag></template></el-table-column>
         <el-table-column label="采购进度" width="120"><template #default="scope"><el-tag v-if="scope.row.purchases.length" type="success" effect="plain">{{ scope.row.purchases.length }} 张采购单</el-tag><span v-else class="muted">未生成</span></template></el-table-column>
-        <el-table-column label="操作" width="365" fixed="right">
+        <el-table-column label="操作" width="460" fixed="right">
           <template #default="scope">
             <el-button link type="primary" @click="printOrder(scope.row)">打印</el-button>
-            <el-button v-if="scope.row.status === 'draft'" link type="primary" @click="openEdit(scope.row)">编辑</el-button>
+            <el-button link type="primary" @click="openEdit(scope.row)">编辑</el-button>
             <el-button v-if="scope.row.status === 'draft'" link type="success" @click="confirm(scope.row)">确认</el-button>
-            <el-button v-if="scope.row.status === 'draft'" link type="danger" @click="remove(scope.row)">删除</el-button>
+            <el-button link type="danger" @click="remove(scope.row)">删除</el-button>
             <el-button v-if="scope.row.status === 'confirmed' && canPurchase" link type="primary" @click="openProcurement(scope.row)">分配供应商并转采购</el-button>
             <el-button v-if="scope.row.status === 'confirmed'" link type="warning" @click="openAcceptance(scope.row)">配送验收</el-button>
           </template>
@@ -203,11 +203,12 @@ const addBatchProducts = () => { batchProductIds.value.forEach(id => { const lin
 const openCreate = () => { Object.assign(form, blank()); batchProductIds.value = []; visible.value = true }
 const openEdit = row => { Object.assign(form, { id: row.id, customer_id: row.customer_id, order_date: row.order_date, delivery_date: row.delivery_date, title: row.title, notes: row.notes || '', items: [...row.items.map(item => ({ product_id: item.product_id, unit_id: item.unit_id, specification: item.specification || '', quantity: item.quantity, unit_price: item.unit_price, remark: item.remark || '' })), newLine()] }); batchProductIds.value = []; visible.value = true }
 const payload = () => ({ customer_id: form.customer_id, order_date: form.order_date, delivery_date: form.delivery_date || null, title: form.title.trim() || '销售订单', notes: form.notes.trim() || null, items: filledItems.value.map(item => ({ ...item, specification: item.specification?.trim() || null, remark: item.remark?.trim() || null })) })
+const notifyBusinessUpdate = detail => window.dispatchEvent(new CustomEvent('business-data-updated', { detail }))
 const save = async () => {
   if (!form.customer_id || !form.order_date) return ElMessage.warning('请选择客户和单据日期')
   if (!filledItems.value.length || filledItems.value.some(item => !item.unit_id || Number(item.quantity) <= 0)) return ElMessage.warning('请完整填写商品、单位和数量')
   saving.value = true
-  try { const result = form.id ? await updateSalesOrder(form.id, payload()) : await createSalesOrder(payload()); ElMessage.success(result.message || '销售单保存成功'); visible.value = false; await load() } finally { saving.value = false }
+  try { const result = form.id ? await updateSalesOrder(form.id, payload()) : await createSalesOrder(payload()); ElMessage.success(result.message || '销售单保存成功'); visible.value = false; await load(); notifyBusinessUpdate({ module: 'sales-orders', action: form.id ? 'update' : 'create' }) } finally { saving.value = false }
 }
 const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char])
 const printOrder = row => {
@@ -240,7 +241,7 @@ const saveAcceptance = async () => {
   } finally { acceptanceSaving.value = false }
 }
 const confirm = async row => { await ElMessageBox.confirm(`确认销售单 ${row.order_no}？确认后不可再修改。`, '确认销售单', { type: 'warning' }); await confirmSalesOrder(row.id); ElMessage.success('销售单已确认'); await load() }
-const remove = async row => { await ElMessageBox.confirm(`确认删除销售单 ${row.order_no}？`, '删除草稿', { type: 'warning' }); await deleteSalesOrder(row.id); ElMessage.success('销售单已删除'); await load() }
+const remove = async row => { await ElMessageBox.confirm(`确认删除销售单 ${row.order_no}？系统会先检查采购、分拣、投诉及财务关联。`, '删除销售单', { type: 'warning' }); const result = await deleteSalesOrder(row.id); ElMessage.success(result.message || '销售单已删除'); await load(); notifyBusinessUpdate({ module: 'sales-orders', action: 'delete', id: row.id }) }
 const selectedSupplierOption = row => row.supplier_options.find(item => item.supplier_id === row.supplier_id)
 const useRecommended = () => procurementItems.value.forEach(item => { if (!item.already_procured) item.supplier_id = item.recommended_supplier_id })
 const applySupplierBatch = () => {

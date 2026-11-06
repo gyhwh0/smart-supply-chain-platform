@@ -534,6 +534,26 @@ def update_complaint(
     complaint = db.get(Complaint, complaint_id)
     if not complaint:
         raise HTTPException(status_code=404, detail="投诉记录不存在")
+    if data.customer_id is not None:
+        customer = db.get(Customer, data.customer_id)
+        if not customer or not customer.active:
+            raise HTTPException(status_code=400, detail="请选择有效客户")
+        complaint.customer_id = customer.id
+    if data.severity is not None:
+        if data.severity not in {"P0", "P1", "P2"}:
+            raise HTTPException(status_code=400, detail="投诉等级不正确")
+        if complaint.severity != data.severity:
+            complaint.due_at = datetime.now() + timedelta(
+                hours=1 if data.severity == "P0" else 4 if data.severity == "P1" else 24
+            )
+        complaint.severity = data.severity
+    if data.category is not None:
+        complaint.category = data.category.strip() or "其他"
+    if data.content is not None:
+        content = data.content.strip()
+        if not content:
+            raise HTTPException(status_code=400, detail="投诉内容不能为空")
+        complaint.content = content
     if data.assigned_to:
         assignee = db.get(User, data.assigned_to)
         if not assignee or not assignee.active:
@@ -543,3 +563,17 @@ def update_complaint(
     complaint.resolution = (data.resolution or "").strip() or None
     db.commit()
     return {"message": "投诉处理信息已更新"}
+
+
+@router.delete("/complaints/{complaint_id}")
+def delete_complaint(
+    complaint_id: int,
+    _: User = Depends(require_permission("complaint_management")),
+    db: Session = Depends(get_db),
+):
+    complaint = db.get(Complaint, complaint_id)
+    if not complaint:
+        raise HTTPException(status_code=404, detail="投诉记录不存在")
+    db.delete(complaint)
+    db.commit()
+    return {"message": "投诉记录已删除"}

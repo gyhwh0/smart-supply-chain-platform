@@ -372,6 +372,10 @@ class WeComSimulateMessage(BaseModel):
 
 class ComplaintUpdate(BaseModel):
     status: str
+    customer_id: int | None = None
+    category: str | None = None
+    severity: str | None = None
+    content: str | None = None
     assigned_to: int | None = None
     resolution: str | None = None
 

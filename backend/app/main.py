@@ -31,7 +31,7 @@ from app.wecom_router import router as wecom_router
 from app.inbound_router import router as inbound_router
 from app.picking_router import router as picking_router
 from app.models import (
-    Category, Customer, LogisticsStaff, Product, ProductSupplier, ProductUnit,
+    Category, Complaint, Customer, LogisticsStaff, Product, ProductSupplier, ProductUnit,
     AIAnalysisQueryLog, InventoryQueryLog, PurchaseOrder, PurchaseOrderItem, Quote,
     PickingTask, SalesOrder, SalesOrderItem, SalesProcurementLink, Supplier, User, WeComOrderDraft,
     WeComOrderDraftItem,
@@ -1479,6 +1479,31 @@ def replace_order_items(order: PurchaseOrder, items, db: Session):
         )
 
 
+def sync_purchase_costs_to_linked_sales(order_id: int, db: Session):
+    """Keep finance gross-profit costs aligned after a linked purchase order is edited."""
+    purchase = db.scalar(
+        order_query().execution_options(populate_existing=True).where(PurchaseOrder.id == order_id)
+    )
+    if not purchase:
+        return
+    purchase_by_product = {item.product_id: item for item in purchase.items}
+    links = db.scalars(
+        select(SalesProcurementLink).where(SalesProcurementLink.purchase_order_id == order_id)
+    ).all()
+    for link in links:
+        sales_order = db.scalar(sales_order_query().where(SalesOrder.id == link.sales_order_id))
+        if not sales_order:
+            continue
+        for sales_item in sales_order.items:
+            purchase_item = purchase_by_product.get(sales_item.product_id)
+            if purchase_item and purchase_item.unit.conversion_rate:
+                sales_item.cost_unit_price = (
+                    purchase_item.unit_price
+                    / purchase_item.unit.conversion_rate
+                    * sales_item.unit.conversion_rate
+                )
+
+
 @app.get("/api/orders")
 def list_orders(
     _: User = Depends(require_permission("order_management")),
@@ -1541,9 +1566,49 @@ def update_order(
     order.notes = data.notes
     order.report_footer = data.report_footer
     replace_order_items(order, data.items, db)
+    db.flush()
+    sync_purchase_costs_to_linked_sales(order_id, db)
     db.commit()
     saved = db.scalar(order_query().execution_options(populate_existing=True).where(PurchaseOrder.id == order_id))
     return order_output(saved)
+
+
+@app.delete("/api/orders/{order_id}")
+def delete_order(
+    order_id: int,
+    _: User = Depends(require_permission("order_management")),
+    db: Session = Depends(get_db),
+):
+    order = db.get(PurchaseOrder, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="采购订单不存在")
+    if order.status != "draft":
+        raise HTTPException(status_code=400, detail="已确认采购单属于业务凭证，不可直接删除；可以编辑更正内容")
+    product_ids = {item.product_id for item in order.items}
+    links = db.scalars(
+        select(SalesProcurementLink).where(SalesProcurementLink.purchase_order_id == order_id)
+    ).all()
+    affected_sales_orders = []
+    for link in links:
+        sales_order = db.scalar(sales_order_query().where(SalesOrder.id == link.sales_order_id))
+        if sales_order:
+            for item in sales_order.items:
+                if item.product_id in product_ids:
+                    item.cost_unit_price = None
+            affected_sales_orders.append(sales_order)
+        db.delete(link)
+    db.flush()
+    for sales_order in affected_sales_orders:
+        remaining = db.scalar(
+            select(func.count())
+            .select_from(SalesProcurementLink)
+            .where(SalesProcurementLink.sales_order_id == sales_order.id)
+        ) or 0
+        if not remaining:
+            sales_order.procurement_generated_at = None
+    db.delete(order)
+    db.commit()
+    return {"message": "采购单已删除；关联销售单可以重新分配供应商"}
 
 
 @app.post("/api/orders/{order_id}/confirm")
@@ -1830,8 +1895,19 @@ def update_sales_order(
     order = db.scalar(sales_order_query().where(SalesOrder.id == order_id))
     if not order:
         raise HTTPException(status_code=404, detail="销售单不存在")
-    if order.status != "draft":
-        raise HTTPException(status_code=400, detail="已确认销售单不可修改")
+    if order.status == "confirmed":
+        has_picking = db.scalar(select(PickingTask.id).where(PickingTask.sales_order_id == order_id))
+        has_finance = bool(
+            order.acceptance_status != "pending"
+            or order.accepted_at
+            or Decimal(order.invoice_amount or 0) != 0
+        )
+        if order.procurement_links:
+            raise HTTPException(status_code=400, detail="该销售单已生成采购单，请先处理关联采购单后再修改")
+        if has_picking:
+            raise HTTPException(status_code=400, detail="该销售单已生成分拣任务，为避免扫码数据错乱不可直接修改")
+        if has_finance:
+            raise HTTPException(status_code=400, detail="该销售单已有验收或开票数据，不可直接修改")
     customer = db.get(Customer, data.customer_id)
     if not customer or not customer.active:
         raise HTTPException(status_code=400, detail="请选择有效客户")
@@ -1872,8 +1948,16 @@ def delete_sales_order(
     order = db.get(SalesOrder, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="销售单不存在")
-    if order.status != "draft" or order.procurement_links:
-        raise HTTPException(status_code=400, detail="仅可删除尚未确认、未生成采购单的草稿")
+    if order.procurement_links:
+        raise HTTPException(status_code=400, detail="该销售单已生成采购单，请先删除对应采购草稿")
+    if db.scalar(select(PickingTask.id).where(PickingTask.sales_order_id == order_id)):
+        raise HTTPException(status_code=400, detail="该销售单已有分拣任务，不可删除")
+    if db.scalar(select(Complaint.id).where(Complaint.sales_order_id == order_id)):
+        raise HTTPException(status_code=400, detail="该销售单已关联投诉记录，不可删除")
+    if db.scalar(select(WeComOrderDraft.id).where(WeComOrderDraft.sales_order_id == order_id)):
+        raise HTTPException(status_code=400, detail="该销售单由企业微信订单草稿生成，不可直接删除")
+    if order.acceptance_status != "pending" or order.accepted_at or Decimal(order.invoice_amount or 0) != 0:
+        raise HTTPException(status_code=400, detail="该销售单已有验收或开票数据，不可删除")
     db.delete(order)
     db.commit()
     return {"message": "销售单已删除"}
