@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import date, datetime, time, timedelta
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.auth import require_permission
@@ -10,17 +10,24 @@ from app.database import SessionLocal, get_db
 from app.models import (
     Complaint,
     Customer,
+    SalesOrder,
     User,
     WeComCustomerBinding,
     WeComMessage,
     WeComOrderDraft,
     WeComOrderDraftItem,
 )
-from app.schemas import ComplaintUpdate, WeComBindingCreate, WeComSimulateMessage
+from app.schemas import ComplaintCreate, ComplaintUpdate, WeComBindingCreate, WeComSimulateMessage
 from app import wecom_service
 
 
 router = APIRouter(prefix="/api", tags=["企业微信"])
+
+
+def _datetime_range(date_from: date | None, date_to: date | None):
+    start = datetime.combine(date_from, time.min) if date_from else None
+    end = datetime.combine(date_to + timedelta(days=1), time.min) if date_to else None
+    return start, end
 
 
 def _run_sync_event(event: dict):
@@ -234,6 +241,8 @@ def delete_binding(
 @router.get("/wecom/messages")
 def list_wecom_messages(
     status: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
     limit: int = 100,
     _: User = Depends(require_permission("wecom_management")),
     db: Session = Depends(get_db),
@@ -246,6 +255,11 @@ def list_wecom_messages(
     )
     if status:
         statement = statement.where(WeComMessage.status == status)
+    start, end = _datetime_range(date_from, date_to)
+    if start:
+        statement = statement.where(WeComMessage.occurred_at >= start)
+    if end:
+        statement = statement.where(WeComMessage.occurred_at < end)
     return [
         {
             "id": row.id,
@@ -326,6 +340,8 @@ def draft_output(row: WeComOrderDraft):
 @router.get("/wecom/order-drafts")
 def list_order_drafts(
     status: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
     _: User = Depends(require_permission("wecom_management")),
     db: Session = Depends(get_db),
 ):
@@ -341,6 +357,11 @@ def list_order_drafts(
     )
     if status:
         statement = statement.where(WeComOrderDraft.status == status)
+    start, end = _datetime_range(date_from, date_to)
+    if start:
+        statement = statement.where(WeComOrderDraft.created_at >= start)
+    if end:
+        statement = statement.where(WeComOrderDraft.created_at < end)
     return [draft_output(row) for row in db.scalars(statement).unique().all()]
 
 
@@ -392,6 +413,8 @@ def simulate_message(
 def list_complaints(
     status: str | None = None,
     severity: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
     _: User = Depends(require_permission("complaint_management")),
     db: Session = Depends(get_db),
 ):
@@ -404,6 +427,11 @@ def list_complaints(
         statement = statement.where(Complaint.status == status)
     if severity:
         statement = statement.where(Complaint.severity == severity)
+    start, end = _datetime_range(date_from, date_to)
+    if start:
+        statement = statement.where(Complaint.created_at >= start)
+    if end:
+        statement = statement.where(Complaint.created_at < end)
     return [
         {
             "id": row.id,
@@ -424,6 +452,74 @@ def list_complaints(
         }
         for row in db.scalars(statement).all()
     ]
+
+
+@router.get("/complaints/summary")
+def complaint_summary(
+    date_from: date | None = None,
+    date_to: date | None = None,
+    _: User = Depends(require_permission("complaint_management")),
+    db: Session = Depends(get_db),
+):
+    complaint_statement = select(func.count()).select_from(Complaint)
+    start, end = _datetime_range(date_from, date_to)
+    if start:
+        complaint_statement = complaint_statement.where(Complaint.created_at >= start)
+    if end:
+        complaint_statement = complaint_statement.where(Complaint.created_at < end)
+    order_statement = select(func.count()).select_from(SalesOrder)
+    if date_from:
+        order_statement = order_statement.where(SalesOrder.order_date >= date_from)
+    if date_to:
+        order_statement = order_statement.where(SalesOrder.order_date <= date_to)
+    complaint_count = db.scalar(complaint_statement) or 0
+    order_count = db.scalar(order_statement) or 0
+    return {
+        "complaint_count": complaint_count,
+        "order_count": order_count,
+        "complaint_rate": round(complaint_count / order_count * 100, 2) if order_count else 0,
+    }
+
+
+@router.post("/complaints")
+def create_complaint(
+    data: ComplaintCreate,
+    _: User = Depends(require_permission("complaint_management")),
+    db: Session = Depends(get_db),
+):
+    customer = db.get(Customer, data.customer_id)
+    if not customer or not customer.active:
+        raise HTTPException(status_code=400, detail="请选择有效客户")
+    if data.severity not in {"P0", "P1", "P2"}:
+        raise HTTPException(status_code=400, detail="投诉等级不正确")
+    content = data.content.strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="请填写投诉内容")
+    assigned_to = data.assigned_to or customer.order_clerk_id
+    if assigned_to:
+        assignee = db.get(User, assigned_to)
+        if not assignee or not assignee.active:
+            raise HTTPException(status_code=400, detail="请选择有效处理人")
+    if data.sales_order_id:
+        order = db.get(SalesOrder, data.sales_order_id)
+        if not order or order.customer_id != customer.id:
+            raise HTTPException(status_code=400, detail="关联销售单与所选客户不一致")
+    now = datetime.now()
+    complaint = Complaint(
+        complaint_no=f"CP{now:%Y%m%d%H%M%S}{uuid4().hex[:4].upper()}",
+        customer_id=customer.id,
+        assigned_to=assigned_to,
+        sales_order_id=data.sales_order_id,
+        category=data.category.strip() or "其他",
+        severity=data.severity,
+        content=content,
+        status="new",
+        due_at=now + timedelta(hours=1 if data.severity == "P0" else 4 if data.severity == "P1" else 24),
+    )
+    db.add(complaint)
+    db.commit()
+    db.refresh(complaint)
+    return {"message": "投诉已登记", "id": complaint.id, "complaint_no": complaint.complaint_no}
 
 
 @router.put("/complaints/{complaint_id}")

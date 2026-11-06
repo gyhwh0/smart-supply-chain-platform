@@ -2,14 +2,16 @@
   <div>
     <div class="page-header"><div><h2>企业微信订单助手</h2><p>管理微信客户绑定、AI订单草稿和消息处理状态</p></div><el-button type="primary" :loading="loading" @click="loadAll">刷新数据</el-button></div>
 
+    <el-card class="date-filter" shadow="never"><b>接收时间</b><el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" :clearable="false" @change="loadAll"/><el-button @click="resetDate">重置今天</el-button><span>订单草稿和微信消息默认只显示当天数据，客户绑定不受时间限制</span></el-card>
+
     <el-alert v-if="!status.configured" type="warning" :closable="false" show-icon title="企业微信参数尚未配置完整">
       <template #default>请在服务器 .env 中配置 WECOM_CORP_ID、WECOM_KF_SECRET、WECOM_CALLBACK_TOKEN 和 WECOM_ENCODING_AES_KEY，然后重启后端。回调地址：<b>{{ callbackUrl }}</b></template>
     </el-alert>
     <div class="metrics">
       <el-card><span>接入状态</span><b :class="status.configured?'ok':'warning'">{{ status.configured?'已配置':'待配置' }}</b></el-card>
       <el-card><span>客户绑定</span><b>{{ status.binding_count || 0 }}</b></el-card>
-      <el-card><span>待处理消息</span><b class="warning">{{ status.pending_message_count || 0 }}</b></el-card>
-      <el-card><span>待确认订单</span><b class="warning">{{ status.pending_draft_count || 0 }}</b></el-card>
+      <el-card><span>区间待处理消息</span><b class="warning">{{ pendingMessageCount }}</b></el-card>
+      <el-card><span>区间待确认订单</span><b class="warning">{{ pendingDraftCount }}</b></el-card>
     </div>
 
     <el-card class="panel">
@@ -49,7 +51,9 @@ import { useRoute } from 'vue-router'
 import { ElMessage,ElMessageBox } from 'element-plus'
 import { confirmWeComOrderDraft,deleteWeComBinding,getWeComBindings,getWeComMessages,getWeComOptions,getWeComOrderDrafts,getWeComStatus,resolveWeComMessage,saveWeComBinding,simulateWeComMessage } from '@/api'
 const route=useRoute()
+const today=()=>new Date().toLocaleDateString('sv-SE')
 const loading=ref(false),activeTab=ref(['drafts','messages','bindings','test'].includes(route.query.tab)?route.query.tab:'drafts'),bindingVisible=ref(false),testResult=ref('')
+const dateRange=ref([today(),today()])
 const onlyPendingMessages=ref(true)
 const status=reactive({}),options=reactive({customers:[],clerks:[]}),drafts=ref([]),messages=ref([]),bindings=ref([])
 const binding=reactive({customer_id:null,external_userid:'',open_kfid:'',wechat_remark:'',verified:true}),test=reactive({external_userid:'',content:'明天送土豆20斤，五花肉10斤',open_kfid:'test-kf'})
@@ -60,8 +64,10 @@ const messageStatus=v=>({needs_binding:'客户待绑定',needs_review:'待人工
 const itemIssue=item=>!item.product_name?'商品尚未匹配':!item.unit_name?'商品已匹配，但客户所需单位尚未配置':item.unit_price==null?'商品未填写参考价格':'需要人工核对'
 const pendingStatuses=['failed','needs_review','needs_binding']
 const pendingMessageCount=computed(()=>messages.value.filter(item=>pendingStatuses.includes(item.status)).length)
+const pendingDraftCount=computed(()=>drafts.value.filter(item=>['needs_review','awaiting_confirmation'].includes(item.status)).length)
 const visibleMessages=computed(()=>onlyPendingMessages.value?messages.value.filter(item=>pendingStatuses.includes(item.status)):messages.value)
-const loadAll=async()=>{loading.value=true;try{const [a,b,c,d,e]=await Promise.all([getWeComStatus(),getWeComOptions(),getWeComBindings(),getWeComMessages(),getWeComOrderDrafts()]);Object.assign(status,a);Object.assign(options,b);bindings.value=c;messages.value=d;drafts.value=e}finally{loading.value=false}}
+const loadAll=async()=>{loading.value=true;try{const params={date_from:dateRange.value?.[0],date_to:dateRange.value?.[1]};const [a,b,c,d,e]=await Promise.all([getWeComStatus(),getWeComOptions(),getWeComBindings(),getWeComMessages(params),getWeComOrderDrafts(params)]);Object.assign(status,a);Object.assign(options,b);bindings.value=c;messages.value=d;drafts.value=e}finally{loading.value=false}}
+const resetDate=async()=>{dateRange.value=[today(),today()];await loadAll()}
 const saveBinding=async()=>{if(!binding.customer_id||!binding.external_userid.trim())return ElMessage.warning('请选择客户并填写微信客户ID');await saveWeComBinding({...binding,wechat_remark:binding.wechat_remark.trim()||null,open_kfid:binding.open_kfid.trim()||'test-kf'});ElMessage.success('绑定已保存');bindingVisible.value=false;Object.assign(binding,{customer_id:null,external_userid:'',open_kfid:'',wechat_remark:'',verified:true});await loadAll()}
 const removeBinding=async row=>{await ElMessageBox.confirm(`确认解除 ${row.customer_name} 的微信绑定吗？`,'解除绑定',{type:'warning'});await deleteWeComBinding(row.id);ElMessage.success('已解除绑定');await loadAll()}
 const refreshAttention=()=>window.dispatchEvent(new CustomEvent('attention-updated'))
@@ -72,5 +78,5 @@ onMounted(loadAll)
 </script>
 
 <style scoped>
-.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:16px 0}.metrics span,.metrics b{display:block}.metrics span{color:#7e8999}.metrics b{font-size:25px;margin-top:7px}.ok{color:#24946b}.warning{color:#db7b2b}.toolbar{display:flex;align-items:center;gap:14px;margin-bottom:14px}.toolbar span{color:#8490a3}.draft-detail{padding:12px 40px 18px;background:#f7f9fc}.test-form{max-width:700px;margin-top:22px}.test-result{margin-top:14px;background:#f7f9fc}.test-result pre{white-space:pre-wrap;margin:0}.profile-name{display:block;color:#8b96a8;font-weight:normal}.profile-help{display:block;color:#8b96a8;margin-top:5px}
+.date-filter{margin:14px 0}.date-filter :deep(.el-card__body){display:flex;align-items:center;flex-wrap:wrap;gap:12px}.date-filter span{color:#8490a3}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:16px 0}.metrics span,.metrics b{display:block}.metrics span{color:#7e8999}.metrics b{font-size:25px;margin-top:7px}.ok{color:#24946b}.warning{color:#db7b2b}.toolbar{display:flex;align-items:center;gap:14px;margin-bottom:14px}.toolbar span{color:#8490a3}.draft-detail{padding:12px 40px 18px;background:#f7f9fc}.test-form{max-width:700px;margin-top:22px}.test-result{margin-top:14px;background:#f7f9fc}.test-result pre{white-space:pre-wrap;margin:0}.profile-name{display:block;color:#8b96a8;font-weight:normal}.profile-help{display:block;color:#8b96a8;margin-top:5px}
 </style>

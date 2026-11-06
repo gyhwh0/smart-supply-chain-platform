@@ -376,6 +376,15 @@ class ComplaintUpdate(BaseModel):
     resolution: str | None = None
 
 
+class ComplaintCreate(BaseModel):
+    customer_id: int
+    assigned_to: int | None = None
+    sales_order_id: int | None = None
+    category: str = "其他"
+    severity: str = "P2"
+    content: str = Field(min_length=1)
+
+
 class QuoteUpsert(BaseModel):
     unit_id: int
     price: Decimal = Field(gt=0)

@@ -70,6 +70,8 @@ export const getWeComOrderDrafts = (params) => request.get('/api/wecom/order-dra
 export const confirmWeComOrderDraft = (id) => request.post(`/api/wecom/order-drafts/${id}/confirm`)
 export const simulateWeComMessage = (data) => request.post('/api/wecom/simulate-message', data)
 export const getComplaints = (params) => request.get('/api/complaints', { params })
+export const getComplaintSummary = (params) => request.get('/api/complaints/summary', { params })
+export const createComplaint = (data) => request.post('/api/complaints', data)
 export const updateComplaint = (id, data) => request.put(`/api/complaints/${id}`, data)
 export const getStaff = () => request.get('/api/staff')
 export const createStaff = (data) => request.post('/api/staff', data)
