@@ -45,7 +45,7 @@ import { ElMessage } from 'element-plus'
 import { createGoodsReceipt,createPurchaseReturn,getGoodsReceipts,getInboundDetails,getInboundOptions,getPurchaseReturns,updateGoodsReceipt } from '@/api'
 const today=()=>new Date().toLocaleDateString('sv-SE'),number=v=>Number(v||0).toLocaleString('zh-CN',{maximumFractionDigits:2}),money=v=>Number(v||0).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2})
 const tab=ref('receipts'),receipts=ref([]),returns=ref([]),details=ref([]),receiptVisible=ref(false),returnVisible=ref(false),receiptKeyword=ref(''),detailTotal=ref(0)
-const options=reactive({suppliers:[],products:[]}),filters=reactive({dates:[],supplier_id:null,product_id:null,keyword:''})
+const options=reactive({suppliers:[],products:[]}),filters=reactive({dates:[today(),today()],supplier_id:null,product_id:null,keyword:''})
 const emptyLine=()=>({product_id:null,unit_id:null,quantity:1,unit_price:0,batch_no:'',production_date:null,shelf_life_days:null,remark:''})
 const blankReceipt=()=>({id:null,supplier_id:null,receipt_date:today(),warehouse:'',notes:'',items:[emptyLine()]})
 const receiptForm=reactive(blankReceipt()),returnForm=reactive({receipt_id:null,supplier_id:null,return_date:today(),reason:'',notes:'',items:[]})
@@ -63,7 +63,7 @@ const openEdit=row=>{Object.assign(receiptForm,{id:row.id,supplier_id:row.suppli
 const receiptPayload=()=>({supplier_id:receiptForm.supplier_id,receipt_date:receiptForm.receipt_date,warehouse:receiptForm.warehouse||null,notes:receiptForm.notes||null,items:receiptForm.items.filter(i=>i.product_id).map(i=>({product_id:i.product_id,unit_id:i.unit_id,quantity:i.quantity,unit_price:i.unit_price,batch_no:i.batch_no||null,production_date:i.production_date||null,shelf_life_days:i.shelf_life_days||null,remark:i.remark||null}))})
 const saveReceipt=async()=>{const payload=receiptPayload();if(!payload.supplier_id)return ElMessage.warning('请选择供应商');if(!payload.items.length)return ElMessage.warning('请至少录入一个商品');if(payload.items.some(i=>!i.unit_id||i.quantity<=0))return ElMessage.warning('请完整填写商品单位和数量');receiptForm.id?await updateGoodsReceipt(receiptForm.id,payload):await createGoodsReceipt(payload);ElMessage.success('进货单已保存');receiptVisible.value=false;await load();if(tab.value==='details')await loadDetails()}
 const loadDetails=async()=>{const result=await getInboundDetails({date_from:filters.dates?.[0],date_to:filters.dates?.[1],supplier_id:filters.supplier_id,product_id:filters.product_id,keyword:filters.keyword||undefined});details.value=result.rows;detailTotal.value=result.total_amount}
-const clearFilters=()=>{Object.assign(filters,{dates:[],supplier_id:null,product_id:null,keyword:''});loadDetails()}
+const clearFilters=()=>{Object.assign(filters,{dates:[today(),today()],supplier_id:null,product_id:null,keyword:''});loadDetails()}
 const tabChanged=name=>{if(name==='details')loadDetails()}
 const detailSummary=({columns})=>columns.map((_,i)=>i===0?'当前筛选合计':i===7?`¥${money(detailTotal.value)}`:'')
 const openReturn=()=>{Object.assign(returnForm,{receipt_id:null,supplier_id:null,return_date:today(),reason:'',notes:'',items:[]});returnVisible.value=true}

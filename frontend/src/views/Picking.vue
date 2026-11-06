@@ -13,7 +13,7 @@
       <el-date-picker v-model="filters.delivery_date" value-format="YYYY-MM-DD" clearable placeholder="配送日期" />
       <el-select v-model="filters.status" clearable placeholder="任务状态"><el-option v-for="(label,key) in statusLabels" :key="key" :label="label" :value="key"/></el-select>
       <el-input v-model="keyword" clearable placeholder="搜索客户、单号、人员" style="width:260px" />
-      <el-button type="primary" @click="loadTasks">查询</el-button><el-button @click="clearFilters">清空</el-button>
+      <el-button type="primary" @click="loadTasks">查询</el-button><el-button @click="clearFilters">重置今天</el-button>
     </el-card>
 
     <el-empty v-if="!filteredTasks.length" description="暂无分拣任务，请先从已确认销售单生成" />
@@ -61,11 +61,11 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { generatePickingTasks,getPickingOptions,getPickingTasks } from '@/api'
 const router=useRouter(),tasks=ref([]),orders=ref([]),selectedOrders=ref([]),generateVisible=ref(false),saving=ref(false),keyword=ref(''),orderTable=ref(null),quickRange=ref('today')
-const filters=reactive({delivery_date:null,status:null})
-const generateFilters=reactive({dateRange:[],keyword:'',sorter:null,delivery:null,assignment:'all',generated:'pending'})
 const statusLabels={pending:'待开始',picking:'分拣中',picked:'已分拣',delivering:'装车中',completed:'已完成'}
 const formatDate=date=>{const year=date.getFullYear(),month=String(date.getMonth()+1).padStart(2,'0'),day=String(date.getDate()).padStart(2,'0');return `${year}-${month}-${day}`}
 const dateAfter=days=>{const result=new Date();result.setDate(result.getDate()+days);return formatDate(result)}
+const filters=reactive({delivery_date:dateAfter(0),status:null})
+const generateFilters=reactive({dateRange:[dateAfter(0),dateAfter(0)],keyword:'',sorter:null,delivery:null,assignment:'all',generated:'pending'})
 const applyQuickRange=value=>{if(value==='today')generateFilters.dateRange=[dateAfter(0),dateAfter(0)];else if(value==='tomorrow')generateFilters.dateRange=[dateAfter(1),dateAfter(1)];else if(value==='week')generateFilters.dateRange=[dateAfter(0),dateAfter(6)];else generateFilters.dateRange=[]}
 const sorterOptions=computed(()=>[...new Set(orders.value.map(row=>row.sorter_name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-CN')))
 const deliveryOptions=computed(()=>[...new Set(orders.value.map(row=>row.delivery_name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-CN')))
@@ -88,7 +88,7 @@ const number=v=>Number(v).toLocaleString('zh-CN',{maximumFractionDigits:4})
 const statusType=s=>s==='completed'?'success':s==='picking'||s==='delivering'?'warning':s==='picked'?'primary':'info'
 const loadTasks=async()=>tasks.value=await getPickingTasks(Object.fromEntries(Object.entries(filters).filter(([,v])=>v)))
 const load=async()=>{[orders.value]=await Promise.all([getPickingOptions(),loadTasks()])}
-const clearFilters=()=>{filters.delivery_date=null;filters.status=null;keyword.value='';loadTasks()}
+const clearFilters=()=>{filters.delivery_date=dateAfter(0);filters.status=null;keyword.value='';loadTasks()}
 const openGenerate=async()=>{orders.value=await getPickingOptions();Object.assign(generateFilters,{dateRange:[],keyword:'',sorter:null,delivery:null,assignment:'all',generated:'pending'});quickRange.value='today';applyQuickRange('today');selectedOrders.value=[];generateVisible.value=true;await nextTick();orderTable.value?.clearSelection()}
 const selectFilteredOrders=()=>{orderTable.value?.clearSelection();filteredOrders.value.filter(row=>!row.generated).forEach(row=>orderTable.value?.toggleRowSelection(row,true))}
 const generate=async()=>{saving.value=true;try{const result=await generatePickingTasks({sales_order_ids:selectedOrders.value.map(row=>row.id)});ElMessage.success(result.message);generateVisible.value=false;selectedOrders.value=[];await load()}finally{saving.value=false}}

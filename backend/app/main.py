@@ -1734,12 +1734,18 @@ def sales_order_options(
 @app.get("/api/sales/orders")
 def list_sales_orders(
     status: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
     _: User = Depends(require_permission("sales_order_management")),
     db: Session = Depends(get_db),
 ):
     statement = sales_order_query().order_by(SalesOrder.order_date.desc(), SalesOrder.id.desc())
     if status in {"draft", "confirmed"}:
         statement = statement.where(SalesOrder.status == status)
+    if date_from:
+        statement = statement.where(SalesOrder.order_date >= date_from)
+    if date_to:
+        statement = statement.where(SalesOrder.order_date <= date_to)
     return [sales_order_output(row) for row in db.scalars(statement).all()]
 
 

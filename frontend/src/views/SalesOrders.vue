@@ -14,8 +14,10 @@
 
     <el-card class="panel">
       <div class="toolbar">
+        <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" range-separator="至" start-placeholder="开始单据日期" end-placeholder="结束单据日期" :clearable="false" @change="load" />
         <el-input v-model="keyword" clearable placeholder="搜索单号、客户、商品" style="width:300px"><template #prefix><el-icon><Search /></el-icon></template></el-input>
         <el-radio-group v-model="statusFilter"><el-radio-button value="all">全部</el-radio-button><el-radio-button value="draft">待确认</el-radio-button><el-radio-button value="confirmed">已确认</el-radio-button></el-radio-group>
+        <el-button @click="resetDate">今天</el-button>
       </div>
       <el-table :data="filteredRows" row-key="id">
         <el-table-column type="expand">
@@ -158,6 +160,7 @@ const acceptance = reactive({ id: null, order_no: '', customer_name: '', busines
 const allocationCategory = ref('')
 const batchSupplierId = ref(null)
 const today = () => new Date().toLocaleDateString('sv-SE')
+const dateRange = ref([today(), today()])
 const newLine = () => ({ product_id: null, unit_id: null, specification: '', quantity: 1, unit_price: 0, remark: '' })
 const blank = () => ({ id: null, customer_id: null, order_date: today(), delivery_date: null, title: '销售订单', notes: '', items: [newLine()] })
 const form = reactive(blank())
@@ -182,7 +185,8 @@ const filteredRows = computed(() => rows.value.filter(row => {
   return text.includes(keyword.value.trim().toLowerCase())
 }))
 const money = value => Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const load = async () => { const [orderRows, optionRows] = await Promise.all([getSalesOrders(), getSalesOrderOptions()]); rows.value = orderRows; Object.assign(options, optionRows) }
+const load = async () => { const [orderRows, optionRows] = await Promise.all([getSalesOrders({ date_from: dateRange.value?.[0], date_to: dateRange.value?.[1] }), getSalesOrderOptions()]); rows.value = orderRows; Object.assign(options, optionRows) }
+const resetDate = async () => { dateRange.value = [today(), today()]; await load() }
 const productOf = line => options.products.find(item => item.id === line.product_id)
 const customerAlias = product => product?.customer_aliases?.find(item => Number(item.customer_id) === Number(form.customer_id))?.alias
 const customerProductName = product => customerAlias(product) || product?.name || ''
@@ -263,13 +267,25 @@ const submitProcurement = async () => {
     await load()
   } finally { generating.value = false }
 }
-onMounted(async () => { await load(); if (route.query.allocate) { const row = rows.value.find(item => item.id === Number(route.query.allocate)); if (row) await openProcurement(row); await router.replace('/sales-orders') } })
+onMounted(async () => {
+  await load()
+  if (route.query.allocate) {
+    let row = rows.value.find(item => item.id === Number(route.query.allocate))
+    if (!row) {
+      const allRows = await getSalesOrders()
+      row = allRows.find(item => item.id === Number(route.query.allocate))
+      if (row) { dateRange.value = [row.order_date, row.order_date]; rows.value = allRows.filter(item => item.order_date === row.order_date) }
+    }
+    if (row) await openProcurement(row)
+    await router.replace('/sales-orders')
+  }
+})
 </script>
 
 <style scoped>
 .metric-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:18px; }
 .metric-grid small,.metric-grid strong { display:block; }.metric-grid small { color:#7c8799; }.metric-grid strong { font-size:25px; margin-top:8px; color:#1c2c44; }
-.toolbar { display:flex; justify-content:space-between; gap:16px; margin-bottom:16px; }.amount { color:#e06535; }.muted { color:#a0a8b5; }
+.toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px; }.amount { color:#e06535; }.muted { color:#a0a8b5; }
 .detail-box { padding:12px 46px 18px; background:#f7f9fc; }.purchase-links { margin-top:12px; display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
 .order-form { margin-top:18px; }.line-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:8px 0 10px; }.line-heading small { display:block; color:#8490a3; margin-top:4px; }.quick-actions { display:flex; gap:8px; align-items:center; }.entry-table { width:100%; }.entry-table :deep(.quick-empty-row td) { background:#f3f8ff; }
 .option-note { float:right; color:#9099a8; margin-left:24px; }.option-note em { color:#2a9d6f; font-style:normal; }.form-bottom { display:grid; grid-template-columns:1fr auto; align-items:end; gap:24px; margin-top:16px; }.grand-total { min-width:260px; text-align:right; }.grand-total span,.grand-total b { display:block; }.grand-total span { color:#7c8799; }.grand-total b { color:#df6131; font-size:24px; margin-top:5px; }

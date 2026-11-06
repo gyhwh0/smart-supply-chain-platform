@@ -5,7 +5,7 @@
     </div>
 
     <el-card class="time-card">
-      <div class="time-title"><div><b>统计时间</b><p>不选择时间时统计全部销售数据；选择时间后只查看对应区间</p></div><el-tag type="success" size="large">{{ periodLabel }}</el-tag></div>
+      <div class="time-title"><div><b>统计时间</b><p>默认显示当天销售数据，可选择其他日期范围；清空后查看全部时间</p></div><el-tag type="success" size="large">{{ periodLabel }}</el-tag></div>
       <div class="time-actions">
         <el-date-picker v-model="dateRange" type="daterange" format="YYYY年MM月DD日" value-format="YYYY-MM-DD" range-separator="至" start-placeholder="开始日期（可选）" end-placeholder="结束日期（可选）" :shortcuts="dateShortcuts" clearable size="large" style="width:420px" @change="loadCustomerBoard" />
         <el-button type="primary" size="large" :loading="loading" @click="loadCustomerBoard">查询客户销售看板</el-button>
@@ -99,7 +99,8 @@ import { ElMessage } from 'element-plus'
 import { downloadSalesSummary, getSalesOverview, getSalesSummary, getSalesSummaryOptions } from '@/api'
 
 const router = useRouter()
-const dateRange = ref([]), loading = ref(false), customerKeyword = ref(''), customerPage = ref(1)
+const today = () => new Date().toLocaleDateString('sv-SE')
+const dateRange = ref([today(), today()]), loading = ref(false), customerKeyword = ref(''), customerPage = ref(1)
 const pageSize = 20
 const overview = reactive({ rows: [], customer_count: 0, order_count: 0, total_amount: 0 })
 const options = reactive({ customers: [], suppliers: [], categories: [], sorters: [], deliveries: [], creators: [] })
@@ -128,7 +129,7 @@ const formatTime = value=>value?new Date(value).toLocaleString('zh-CN',{hour12:f
 const loadOverview = async()=>Object.assign(overview,await getSalesOverview({...baseParams(),keyword:customerKeyword.value.trim()||undefined,page:customerPage.value,page_size:pageSize}))
 const loadCustomerBoard = async()=>{loading.value=true;customerPage.value=1;try{await loadOverview()}finally{loading.value=false}}
 const searchCustomer = async()=>{customerPage.value=1;await loadOverview()}
-const reset = async()=>{dateRange.value=[];customerKeyword.value='';await loadCustomerBoard()}
+const reset = async()=>{dateRange.value=[today(),today()];customerKeyword.value='';await loadCustomerBoard()}
 const openCustomer = row=>router.push({path:`/sales-customers/${row.customer_id}`,query:baseParams()})
 const openReport = async item=>{Object.assign(activeReport,item);Object.assign(reportFilters,{dimension:item.dimension,customer_id:null,supplier_id:null,category:null,sorter_id:null,delivery_id:null,creator_id:null});reportVisible.value=true;await loadReport()}
 const loadReport = async()=>{reportLoading.value=true;reportPage.value=1;try{const [main,suppliers,categories]=await Promise.all([getSalesSummary(reportParams()),getSalesSummary(reportParams('supplier')),getSalesSummary(reportParams('category'))]);Object.assign(reportSummary,main);Object.assign(supplierPreview,suppliers);Object.assign(categoryPreview,categories)}finally{reportLoading.value=false}}
