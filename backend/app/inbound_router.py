@@ -22,6 +22,7 @@ from app.models import (
     User,
 )
 from app.schemas import GoodsReceiptIn, PurchaseReturnIn
+from app import warehouse_service
 
 
 router = APIRouter(prefix="/api", tags=["进货管理"])
@@ -172,6 +173,7 @@ def create_receipt(
     db.add(receipt)
     db.flush()
     _replace_receipt_items(receipt, data.items, db)
+    warehouse_service.sync_receipt(db, receipt)
     db.commit()
     return _receipt_output(db.scalar(_receipt_query().where(GoodsReceipt.id == receipt.id)))
 
@@ -196,6 +198,7 @@ def update_receipt(
     receipt.warehouse = _clean(data.warehouse)
     receipt.notes = _clean(data.notes)
     _replace_receipt_items(receipt, data.items, db)
+    warehouse_service.sync_receipt(db, receipt)
     db.commit()
     return _receipt_output(db.scalar(_receipt_query().where(GoodsReceipt.id == receipt.id)))
 
@@ -340,6 +343,7 @@ def create_return(
             product_id=product.id, unit_id=unit.id, quantity=incoming.quantity,
             unit_price=incoming.unit_price, batch_no=_clean(incoming.batch_no), remark=_clean(incoming.remark),
         ))
+    warehouse_service.sync_return(db, order)
     db.commit()
     return _return_output(db.scalar(_return_query().where(PurchaseReturn.id == order.id)))
 

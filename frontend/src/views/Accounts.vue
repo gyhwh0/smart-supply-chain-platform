@@ -70,6 +70,7 @@ const permissionOptions = [
   { value: 'wecom_management', label: '企业微信订单助手', description: '微信客户绑定、消息及订单草稿' },
   { value: 'complaint_management', label: '投诉专栏', description: '处理客户投诉及食品安全升级' },
   { value: 'inbound_management', label: '进货管理', description: '进货、明细查询及进货退货' },
+  { value: 'warehouse_management', label: '仓库管理', description: '入库、出库、领料、备货与库存台账' },
   { value: 'label_printing', label: '标签打印', description: '按客户订单或自定义批量打印标签' },
   { value: 'picking_management', label: '扫码分拣', description: '生成分拣任务、扫码确认和查看进度' },
   { value: 'picking_monitor', label: '分拣配送监控', description: '查看人员工作量、客户耗时和单品操作时间' },
@@ -77,9 +78,9 @@ const permissionOptions = [
 ]
 const roleDefaults = {
   admin: permissionOptions.filter(item => item.value !== 'finance_management').map(item => item.value),
-  purchaser: ['dashboard', 'account_management', 'supplier_management', 'category_management', 'product_management', 'assignment_management', 'analysis', 'inventory', 'inventory_update', 'order_management', 'staff_management', 'customer_management', 'sales_order_management', 'sales_summary', 'wecom_management', 'complaint_management', 'inbound_management', 'label_printing', 'picking_management', 'picking_monitor'],
+  purchaser: ['dashboard', 'account_management', 'supplier_management', 'category_management', 'product_management', 'assignment_management', 'analysis', 'inventory', 'inventory_update', 'order_management', 'staff_management', 'customer_management', 'sales_order_management', 'sales_summary', 'wecom_management', 'complaint_management', 'inbound_management', 'warehouse_management', 'label_printing', 'picking_management', 'picking_monitor'],
   order_clerk: ['dashboard', 'sales_order_management', 'sales_summary', 'wecom_management', 'complaint_management', 'label_printing', 'picking_management', 'picking_monitor'],
-  warehouse: ['dashboard', 'inventory', 'inventory_update', 'staff_management', 'customer_management', 'inbound_management', 'label_printing', 'picking_management', 'picking_monitor'],
+  warehouse: ['dashboard', 'inventory', 'inventory_update', 'staff_management', 'customer_management', 'inbound_management', 'warehouse_management', 'label_printing', 'picking_management', 'picking_monitor'],
   supplier: ['dashboard', 'product_management', 'quote_management', 'inventory'],
 }
 const blank = () => ({ id: null, username: '', password: '', name: '', role: 'purchaser', supplier_id: null, active: true, permissions: [...roleDefaults.purchaser] })

@@ -21,6 +21,7 @@ from app.models import (
     User,
 )
 from app.schemas import PickingGenerateIn, PickingScanIn, StaffMobileLoginIn
+from app import warehouse_service
 
 
 router = APIRouter(prefix="/api", tags=["扫码分拣"])
@@ -157,6 +158,7 @@ def _apply_stage(task: PickingTask, item: PickingTaskItem, stage: str, note: str
     any_picked = any(row.picked_at for row in task.items)
     any_loaded = any(row.loaded_at for row in task.items)
     task.status = "completed" if all_loaded else "delivering" if any_loaded else "picked" if all_picked else "picking" if any_picked else "pending"
+    warehouse_service.sync_picking_task(db, task)
 
 
 @router.get("/public/staff-entry/{mobile_token}")
@@ -436,6 +438,8 @@ def generate_picking_tasks(
             scan_code=uuid4().hex + uuid4().hex[:8],
         ) for item in order.items]
         db.add(task)
+        db.flush()
+        warehouse_service.sync_picking_task(db, task)
         created += 1
     db.commit()
     return {"message": f"已生成 {created} 个客户分拣任务，跳过 {skipped} 个已有或无效订单", "created": created, "skipped": skipped}

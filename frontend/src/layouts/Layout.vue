@@ -75,8 +75,9 @@
         <el-menu-item v-if="can('inventory')" index="/inventory"
           ><el-icon><Files /></el-icon><span>库存查询</span></el-menu-item
         >
-        <el-sub-menu v-if="can('inbound_management') || can('label_printing') || can('picking_management') || can('picking_monitor')" index="warehouse-business">
-          <template #title><el-icon><Box /></el-icon><span>进货与标签</span></template>
+        <el-sub-menu v-if="can('warehouse_management') || can('inbound_management') || can('label_printing') || can('picking_management') || can('picking_monitor')" index="warehouse-business">
+          <template #title><el-icon><Box /></el-icon><span>仓库管理</span></template>
+          <el-menu-item v-if="can('warehouse_management')" index="/warehouse">库存台账</el-menu-item>
           <el-menu-item v-if="can('inbound_management')" index="/inbound">进货与退货</el-menu-item>
           <el-menu-item v-if="can('label_printing')" index="/label-printing">标签打印</el-menu-item>
           <el-menu-item v-if="can('picking_management')" index="/picking">扫码分拣</el-menu-item>

@@ -256,6 +256,46 @@ class PurchaseReturnItem(Base):
     unit: Mapped[ProductUnit] = relationship()
 
 
+class WarehouseDocument(Base):
+    __tablename__ = "warehouse_documents"
+    __table_args__ = (
+        UniqueConstraint("document_type", "source_type", "source_id", name="uq_warehouse_source"),
+    )
+
+    document_no: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    document_type: Mapped[str] = mapped_column(String(20), index=True)
+    business_date: Mapped[date] = mapped_column(Date, index=True)
+    warehouse: Mapped[str] = mapped_column(String(100), default="主仓库")
+    target_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    source_type: Mapped[str] = mapped_column(String(30), default="manual")
+    source_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_no: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="confirmed")
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+
+    creator: Mapped[User] = relationship(foreign_keys=[created_by])
+    items: Mapped[list["WarehouseDocumentItem"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan", order_by="WarehouseDocumentItem.id"
+    )
+
+
+class WarehouseDocumentItem(Base):
+    __tablename__ = "warehouse_document_items"
+
+    document_id: Mapped[int] = mapped_column(ForeignKey("warehouse_documents.id"), index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
+    unit_id: Mapped[int] = mapped_column(ForeignKey("product_units.id"))
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 4))
+    base_quantity: Mapped[Decimal] = mapped_column(Numeric(14, 4))
+    batch_no: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    remark: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    document: Mapped[WarehouseDocument] = relationship(back_populates="items")
+    product: Mapped[Product] = relationship()
+    unit: Mapped[ProductUnit] = relationship()
+
+
 class LogisticsStaff(Base):
     __tablename__ = "logistics_staff"
 

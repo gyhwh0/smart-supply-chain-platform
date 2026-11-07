@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import PickingTask, PickingTaskItem, SalesOrder
+from app import warehouse_service
 
 
 def _refresh_status(task: PickingTask) -> None:
@@ -70,4 +71,6 @@ def sync_picking_task(db: Session, order: SalesOrder) -> dict:
             order.accepted_by = None
         updated += 1
     _refresh_status(task)
+    db.flush()
+    warehouse_service.sync_picking_task(db, task)
     return {"task_found": True, "added": added, "updated": updated}

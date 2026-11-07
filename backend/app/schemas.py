@@ -343,6 +343,23 @@ class PurchaseReturnIn(BaseModel):
     items: list[PurchaseReturnItemIn] = Field(min_length=1)
 
 
+class WarehouseDocumentItemIn(BaseModel):
+    product_id: int
+    unit_id: int
+    quantity: Decimal = Field(gt=0)
+    batch_no: str | None = None
+    remark: str | None = None
+
+
+class WarehouseDocumentIn(BaseModel):
+    document_type: str
+    business_date: date
+    warehouse: str = "主仓库"
+    target_name: str | None = None
+    notes: str | None = None
+    items: list[WarehouseDocumentItemIn] = Field(min_length=1)
+
+
 class PickingGenerateIn(BaseModel):
     sales_order_ids: list[int] = Field(min_length=1)
 

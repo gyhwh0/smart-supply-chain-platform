@@ -26,10 +26,11 @@ from app.auth import (
 )
 from app.config import settings
 from app.database import Base, SessionLocal, engine, get_db
-from app import finance_router, inventory_service, picking_service, report_service, sales_order_service, sales_report_service, wecom_service
+from app import finance_router, inventory_service, picking_service, report_service, sales_order_service, sales_report_service, warehouse_service, wecom_service
 from app.wecom_router import router as wecom_router
 from app.inbound_router import router as inbound_router
 from app.picking_router import router as picking_router
+from app.warehouse_router import router as warehouse_router
 from app.models import (
     Category, Complaint, Customer, LogisticsStaff, Product, ProductSupplier, ProductUnit,
     AIAnalysisQueryLog, InventoryQueryLog, PurchaseOrder, PurchaseOrderItem, Quote,
@@ -80,6 +81,7 @@ app = FastAPI(title="嘉采供应链管理平台", version="1.0.0")
 app.include_router(wecom_router)
 app.include_router(inbound_router)
 app.include_router(picking_router)
+app.include_router(warehouse_router)
 app.include_router(finance_router.router)
 app.add_middleware(
     CORSMiddleware,
@@ -184,6 +186,7 @@ def startup():
             "order_management", "staff_management", "customer_management",
             "sales_order_management", "sales_summary", "wecom_management",
             "complaint_management",
+            "warehouse_management",
         }
         managers = db.scalars(
             select(User).where(User.role.in_({"admin", "purchaser"}), User.username != "system_admin")
@@ -253,6 +256,7 @@ def startup():
                 db.delete(duplicate)
         if duplicate_pairs:
             db.commit()
+        warehouse_service.backfill(db)
     if engine.dialect.name == "sqlite":
         with engine.begin() as connection:
             connection.execute(

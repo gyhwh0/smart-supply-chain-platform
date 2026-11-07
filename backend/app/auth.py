@@ -36,6 +36,7 @@ ALL_PERMISSIONS = {
     "picking_management",
     "picking_monitor",
     "finance_management",
+    "warehouse_management",
 }
 ROLE_PERMISSIONS = {
     # 财务数据属于敏感权限，所有角色（包括管理员）默认都不启用。
@@ -46,9 +47,9 @@ ROLE_PERMISSIONS = {
         "order_management", "staff_management", "customer_management",
         "sales_order_management", "sales_summary", "wecom_management",
         "complaint_management",
-        "inbound_management", "label_printing", "picking_management", "picking_monitor",
+        "inbound_management", "warehouse_management", "label_printing", "picking_management", "picking_monitor",
     },
-    "warehouse": {"dashboard", "inventory", "inventory_update", "staff_management", "customer_management", "inbound_management", "label_printing", "picking_management", "picking_monitor"},
+    "warehouse": {"dashboard", "inventory", "inventory_update", "staff_management", "customer_management", "inbound_management", "warehouse_management", "label_printing", "picking_management", "picking_monitor"},
     "supplier": {"dashboard", "product_management", "quote_management", "inventory"},
     "order_clerk": {
         "dashboard", "sales_order_management", "sales_summary",
