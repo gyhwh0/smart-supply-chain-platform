@@ -7,7 +7,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import (
-    GoodsReceipt, PickingTask, PickingTaskItem, Product, ProductUnit, PurchaseReturn, SalesOrderItem,
+    GoodsReceipt, PickingTask, PickingTaskItem, Product, ProductUnit, PurchaseOrder, PurchaseOrderItem,
+    PurchaseRequisition, PurchaseRequisitionItem, PurchaseRequisitionOrder, PurchaseReturn, SalesOrderItem,
     User, WarehouseDocument, WarehouseDocumentItem,
 )
 
@@ -21,6 +22,57 @@ def document_query():
         selectinload(WarehouseDocument.items).selectinload(WarehouseDocumentItem.product),
         selectinload(WarehouseDocument.items).selectinload(WarehouseDocumentItem.unit),
     )
+
+
+def requisition_query():
+    return select(PurchaseRequisition).options(
+        selectinload(PurchaseRequisition.creator),
+        selectinload(PurchaseRequisition.warehouse_document),
+        selectinload(PurchaseRequisition.items).selectinload(PurchaseRequisitionItem.product),
+        selectinload(PurchaseRequisition.items).selectinload(PurchaseRequisitionItem.unit),
+        selectinload(PurchaseRequisition.order_links).selectinload(
+            PurchaseRequisitionOrder.purchase_order
+        ).selectinload(PurchaseOrder.items).selectinload(PurchaseOrderItem.unit),
+        selectinload(PurchaseRequisition.order_links).selectinload(
+            PurchaseRequisitionOrder.purchase_order
+        ).selectinload(PurchaseOrder.supplier),
+    )
+
+
+def _ordered_base(requisition: PurchaseRequisition) -> dict[int, Decimal]:
+    ordered = defaultdict(lambda: Decimal("0"))
+    for link in requisition.order_links:
+        for item in link.purchase_order.items:
+            ordered[item.product_id] += item.quantity * item.unit.conversion_rate
+    return ordered
+
+
+def requisition_output(row: PurchaseRequisition) -> dict:
+    ordered = _ordered_base(row)
+    items = []
+    for item in row.items:
+        ordered_base = ordered[item.product_id]
+        remaining_base = max(Decimal("0"), item.base_quantity - ordered_base)
+        items.append({
+            "id": item.id, "product_id": item.product_id, "product_name": item.product.name,
+            "category": item.product.category, "unit_id": item.unit_id, "unit_name": item.unit.name,
+            "quantity": float(item.quantity),
+            "ordered_quantity": float(ordered_base / item.unit.conversion_rate),
+            "remaining_quantity": float(remaining_base / item.unit.conversion_rate),
+            "remaining_base_quantity": float(remaining_base),
+        })
+    return {
+        "id": row.id, "requisition_no": row.requisition_no,
+        "warehouse_document_id": row.warehouse_document_id,
+        "warehouse_document_no": row.warehouse_document.document_no,
+        "needed_date": row.needed_date, "target_name": row.target_name,
+        "status": row.status, "creator_name": row.creator.name, "created_at": row.created_at,
+        "items": items,
+        "purchase_orders": [{
+            "id": link.purchase_order.id, "order_no": link.purchase_order.order_no,
+            "supplier_name": link.purchase_order.supplier.name, "status": link.purchase_order.status,
+        } for link in row.order_links],
+    }
 
 
 def output(row: WarehouseDocument) -> dict:
@@ -186,6 +238,54 @@ def stock_rows(db: Session) -> list[dict]:
     return sorted(output_rows, key=lambda row: (row["category"], row["product_name"]))
 
 
+def rebuild_requisitions(db: Session):
+    """Allocate stock to preparation documents in date/id order and expose only the uncovered shortage."""
+    db.flush()
+    documents = db.scalars(document_query().order_by(WarehouseDocument.business_date, WarehouseDocument.id)).unique().all()
+    balance = defaultdict(lambda: Decimal("0"))
+    for document in documents:
+        if document.status not in {"confirmed", "released"}:
+            continue
+        if document.document_type == "inbound":
+            for item in document.items:
+                balance[item.product_id] += item.base_quantity
+        elif document.document_type in {"outbound", "material"}:
+            for item in document.items:
+                balance[item.product_id] -= item.base_quantity
+        elif document.document_type == "preparation":
+            shortages = []
+            if document.status == "confirmed":
+                for item in document.items:
+                    usable = max(Decimal("0"), balance[item.product_id])
+                    shortage = max(Decimal("0"), item.base_quantity - usable)
+                    balance[item.product_id] -= item.base_quantity
+                    if shortage:
+                        shortages.append((item, shortage))
+            requisition = db.scalar(select(PurchaseRequisition).where(
+                PurchaseRequisition.warehouse_document_id == document.id
+            ))
+            if not requisition:
+                requisition = PurchaseRequisition(
+                    requisition_no=f"CGXQ{datetime.now():%Y%m%d%H%M%S}{uuid4().hex[:4].upper()}",
+                    warehouse_document_id=document.id, needed_date=document.business_date,
+                    target_name=document.target_name, created_by=document.created_by,
+                )
+                db.add(requisition)
+                db.flush()
+            requisition.needed_date = document.business_date
+            requisition.target_name = document.target_name
+            requisition.items.clear()
+            for item, shortage in shortages:
+                requisition.items.append(PurchaseRequisitionItem(
+                    product_id=item.product_id, unit_id=item.unit_id,
+                    quantity=shortage / item.unit.conversion_rate, base_quantity=shortage,
+                ))
+            db.flush()
+            ordered = _ordered_base(requisition)
+            remaining = any(item.base_quantity > ordered[item.product_id] for item in requisition.items)
+            requisition.status = "pending" if remaining else "ordered" if requisition.order_links else "sufficient"
+
+
 def backfill(db: Session):
     receipts = db.scalars(select(GoodsReceipt).options(selectinload(GoodsReceipt.supplier), selectinload(GoodsReceipt.items))).all()
     for receipt in receipts:
@@ -196,4 +296,5 @@ def backfill(db: Session):
     tasks = db.scalars(select(PickingTask)).all()
     for task in tasks:
         sync_picking_task(db, task)
+    rebuild_requisitions(db)
     db.commit()

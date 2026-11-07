@@ -159,6 +159,7 @@ def _apply_stage(task: PickingTask, item: PickingTaskItem, stage: str, note: str
     any_loaded = any(row.loaded_at for row in task.items)
     task.status = "completed" if all_loaded else "delivering" if any_loaded else "picked" if all_picked else "picking" if any_picked else "pending"
     warehouse_service.sync_picking_task(db, task)
+    warehouse_service.rebuild_requisitions(db)
 
 
 @router.get("/public/staff-entry/{mobile_token}")
@@ -441,6 +442,7 @@ def generate_picking_tasks(
         db.flush()
         warehouse_service.sync_picking_task(db, task)
         created += 1
+    warehouse_service.rebuild_requisitions(db)
     db.commit()
     return {"message": f"已生成 {created} 个客户分拣任务，跳过 {skipped} 个已有或无效订单", "created": created, "skipped": skipped}
 

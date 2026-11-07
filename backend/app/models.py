@@ -278,6 +278,9 @@ class WarehouseDocument(Base):
     items: Mapped[list["WarehouseDocumentItem"]] = relationship(
         back_populates="document", cascade="all, delete-orphan", order_by="WarehouseDocumentItem.id"
     )
+    requisition: Mapped["PurchaseRequisition | None"] = relationship(
+        back_populates="warehouse_document", cascade="all, delete-orphan", uselist=False
+    )
 
 
 class WarehouseDocumentItem(Base):
@@ -294,6 +297,51 @@ class WarehouseDocumentItem(Base):
     document: Mapped[WarehouseDocument] = relationship(back_populates="items")
     product: Mapped[Product] = relationship()
     unit: Mapped[ProductUnit] = relationship()
+
+
+class PurchaseRequisition(Base):
+    __tablename__ = "purchase_requisitions"
+
+    requisition_no: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    warehouse_document_id: Mapped[int] = mapped_column(ForeignKey("warehouse_documents.id"), unique=True)
+    needed_date: Mapped[date] = mapped_column(Date)
+    target_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+
+    warehouse_document: Mapped[WarehouseDocument] = relationship(back_populates="requisition")
+    creator: Mapped[User] = relationship(foreign_keys=[created_by])
+    items: Mapped[list["PurchaseRequisitionItem"]] = relationship(
+        back_populates="requisition", cascade="all, delete-orphan", order_by="PurchaseRequisitionItem.id"
+    )
+    order_links: Mapped[list["PurchaseRequisitionOrder"]] = relationship(
+        back_populates="requisition", cascade="all, delete-orphan"
+    )
+
+
+class PurchaseRequisitionItem(Base):
+    __tablename__ = "purchase_requisition_items"
+
+    requisition_id: Mapped[int] = mapped_column(ForeignKey("purchase_requisitions.id"))
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
+    unit_id: Mapped[int] = mapped_column(ForeignKey("product_units.id"))
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 4))
+    base_quantity: Mapped[Decimal] = mapped_column(Numeric(14, 4))
+
+    requisition: Mapped[PurchaseRequisition] = relationship(back_populates="items")
+    product: Mapped[Product] = relationship()
+    unit: Mapped[ProductUnit] = relationship()
+
+
+class PurchaseRequisitionOrder(Base):
+    __tablename__ = "purchase_requisition_orders"
+    __table_args__ = (UniqueConstraint("requisition_id", "purchase_order_id", name="uq_requisition_order"),)
+
+    requisition_id: Mapped[int] = mapped_column(ForeignKey("purchase_requisitions.id"))
+    purchase_order_id: Mapped[int] = mapped_column(ForeignKey("purchase_orders.id"))
+
+    requisition: Mapped[PurchaseRequisition] = relationship(back_populates="order_links")
+    purchase_order: Mapped[PurchaseOrder] = relationship()
 
 
 class LogisticsStaff(Base):

@@ -33,7 +33,7 @@ from app.picking_router import router as picking_router
 from app.warehouse_router import router as warehouse_router
 from app.models import (
     Category, Complaint, Customer, LogisticsStaff, Product, ProductSupplier, ProductUnit,
-    AIAnalysisQueryLog, InventoryQueryLog, PurchaseOrder, PurchaseOrderItem, Quote,
+    AIAnalysisQueryLog, InventoryQueryLog, PurchaseOrder, PurchaseOrderItem, PurchaseRequisition, PurchaseRequisitionOrder, Quote,
     PickingTask, SalesOrder, SalesOrderItem, SalesProcurementLink, Supplier, User, WeComOrderDraft,
     WeComOrderDraftItem,
 )
@@ -1515,6 +1515,77 @@ def list_orders(
 ):
     orders = db.scalars(order_query().order_by(PurchaseOrder.id.desc())).all()
     return [order_output(order) for order in orders]
+
+
+@app.get("/api/orders/requisitions")
+def list_purchase_requisitions(
+    status: str | None = None,
+    _: User = Depends(require_permission("order_management")),
+    db: Session = Depends(get_db),
+):
+    warehouse_service.rebuild_requisitions(db)
+    db.commit()
+    statement = warehouse_service.requisition_query().order_by(
+        PurchaseRequisition.needed_date.desc(), PurchaseRequisition.id.desc()
+    )
+    if status:
+        statement = statement.where(PurchaseRequisition.status == status)
+    rows = db.scalars(statement).unique().all()
+    return [warehouse_service.requisition_output(row) for row in rows]
+
+
+@app.post("/api/orders/requisitions/{requisition_id}/generate")
+def generate_orders_from_requisition(
+    requisition_id: int,
+    user: User = Depends(require_permission("order_management")),
+    db: Session = Depends(get_db),
+):
+    requisition = db.scalar(
+        warehouse_service.requisition_query().where(PurchaseRequisition.id == requisition_id)
+    )
+    if not requisition:
+        raise HTTPException(status_code=404, detail="备货采购需求不存在")
+    ordered = warehouse_service._ordered_base(requisition)
+    grouped = {}
+    unquoted = []
+    for item in requisition.items:
+        remaining_base = max(Decimal("0"), item.base_quantity - ordered[item.product_id])
+        if not remaining_base:
+            continue
+        best = best_supplier_quote(item.product_id, db)
+        if not best:
+            unquoted.append(item.product.name)
+            continue
+        _, quote, quote_unit, supplier = best
+        group = grouped.setdefault(supplier.id, {"supplier": supplier, "items": []})
+        group["items"].append(OrderItemIn(
+            product_id=item.product_id, unit_id=quote_unit.id,
+            quantity=remaining_base / quote_unit.conversion_rate,
+            unit_price=quote.price,
+            remark=f"引用备货采购需求 {requisition.requisition_no}",
+        ))
+    created = []
+    for group in grouped.values():
+        purchase = PurchaseOrder(
+            order_no=f"PO{datetime.now():%Y%m%d%H%M%S}{uuid4().hex[:4].upper()}",
+            supplier_id=group["supplier"].id, created_by=user.id,
+            title=f"备货采购 - {requisition.target_name or requisition.requisition_no}",
+            expected_date=requisition.needed_date,
+            notes=f"由仓库备货需求 {requisition.requisition_no} 自动生成",
+            report_footer="请供应商按备货采购明细及时备货并反馈交期",
+        )
+        db.add(purchase)
+        db.flush()
+        replace_order_items(purchase, group["items"], db)
+        db.add(PurchaseRequisitionOrder(requisition_id=requisition.id, purchase_order_id=purchase.id))
+        created.append({"id": purchase.id, "order_no": purchase.order_no, "supplier_name": group["supplier"].name})
+    db.flush()
+    warehouse_service.rebuild_requisitions(db)
+    db.commit()
+    return {
+        "message": f"已按最优报价生成 {len(created)} 张采购草稿",
+        "created": created, "unquoted_products": unquoted,
+    }
 
 
 @app.get("/api/orders/{order_id}")

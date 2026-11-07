@@ -92,6 +92,7 @@ def create_document(
         warehouse_service.replace_items(document, [item.model_dump() for item in data.items], db)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    warehouse_service.rebuild_requisitions(db)
     db.commit()
     return warehouse_service.output(db.scalar(warehouse_service.document_query().where(WarehouseDocument.id == document.id)))
 
@@ -108,5 +109,7 @@ def delete_document(
     if document.source_type != "manual":
         raise HTTPException(status_code=400, detail="联动生成的仓库单据不能直接删除，请修改对应来源单据")
     db.delete(document)
+    db.flush()
+    warehouse_service.rebuild_requisitions(db)
     db.commit()
     return {"message": "仓库单据已删除，库存结余已重新计算"}

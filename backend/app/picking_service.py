@@ -73,4 +73,5 @@ def sync_picking_task(db: Session, order: SalesOrder) -> dict:
     _refresh_status(task)
     db.flush()
     warehouse_service.sync_picking_task(db, task)
+    warehouse_service.rebuild_requisitions(db)
     return {"task_found": True, "added": added, "updated": updated}

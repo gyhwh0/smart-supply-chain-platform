@@ -174,6 +174,7 @@ def create_receipt(
     db.flush()
     _replace_receipt_items(receipt, data.items, db)
     warehouse_service.sync_receipt(db, receipt)
+    warehouse_service.rebuild_requisitions(db)
     db.commit()
     return _receipt_output(db.scalar(_receipt_query().where(GoodsReceipt.id == receipt.id)))
 
@@ -199,6 +200,7 @@ def update_receipt(
     receipt.notes = _clean(data.notes)
     _replace_receipt_items(receipt, data.items, db)
     warehouse_service.sync_receipt(db, receipt)
+    warehouse_service.rebuild_requisitions(db)
     db.commit()
     return _receipt_output(db.scalar(_receipt_query().where(GoodsReceipt.id == receipt.id)))
 
@@ -344,6 +346,7 @@ def create_return(
             unit_price=incoming.unit_price, batch_no=_clean(incoming.batch_no), remark=_clean(incoming.remark),
         ))
     warehouse_service.sync_return(db, order)
+    warehouse_service.rebuild_requisitions(db)
     db.commit()
     return _return_output(db.scalar(_return_query().where(PurchaseReturn.id == order.id)))
 
