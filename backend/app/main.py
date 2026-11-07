@@ -213,6 +213,14 @@ def startup():
                 clerk_changed = True
         if clerk_changed:
             db.commit()
+        supplier_accounts = db.scalars(select(User).where(User.role == "supplier")).all()
+        supplier_changed = False
+        for account in supplier_accounts:
+            if account.permissions_csv is not None and "supplier_order_view" not in account.permissions:
+                account.permissions_csv = ",".join(sorted(set(account.permissions) | {"supplier_order_view"}))
+                supplier_changed = True
+        if supplier_changed:
+            db.commit()
         staff_without_tokens = db.scalars(
             select(LogisticsStaff).where(LogisticsStaff.mobile_token.is_(None))
         ).all()
@@ -1534,6 +1542,22 @@ def list_purchase_requisitions(
     return [warehouse_service.requisition_output(row) for row in rows]
 
 
+@app.get("/api/supplier/orders")
+def supplier_orders(
+    user: User = Depends(require_permission("supplier_order_view")),
+    db: Session = Depends(get_db),
+):
+    if user.role != "supplier" or not user.supplier_id:
+        raise HTTPException(status_code=403, detail="当前账号未绑定供应商")
+    rows = db.scalars(
+        order_query().where(
+            PurchaseOrder.supplier_id == user.supplier_id,
+            PurchaseOrder.status == "confirmed",
+        ).order_by(PurchaseOrder.confirmed_at.desc(), PurchaseOrder.id.desc())
+    ).all()
+    return [order_output(row) for row in rows]
+
+
 @app.post("/api/orders/requisitions/{requisition_id}/generate")
 def generate_orders_from_requisition(
     requisition_id: int,
@@ -1710,13 +1734,25 @@ def report_order(order_id: int, db: Session):
     return order
 
 
+def authorize_order_report(order: PurchaseOrder, user: User):
+    can_manage = "order_management" in effective_permissions(user)
+    can_supplier_view = (
+        "supplier_order_view" in effective_permissions(user)
+        and user.role == "supplier"
+        and user.supplier_id == order.supplier_id
+    )
+    if not (can_manage or can_supplier_view):
+        raise HTTPException(status_code=403, detail="无权下载该采购订单")
+
+
 @app.get("/api/orders/{order_id}/report.xlsx")
 def download_order_excel(
     order_id: int,
-    _: User = Depends(require_permission("order_management")),
+    user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
     order = report_order(order_id, db)
+    authorize_order_report(order, user)
     return StreamingResponse(
         report_service.build_excel(order),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1727,10 +1763,11 @@ def download_order_excel(
 @app.get("/api/orders/{order_id}/report.png")
 def download_order_image(
     order_id: int,
-    _: User = Depends(require_permission("order_management")),
+    user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
     order = report_order(order_id, db)
+    authorize_order_report(order, user)
     return StreamingResponse(
         report_service.build_image(order),
         media_type="image/png",

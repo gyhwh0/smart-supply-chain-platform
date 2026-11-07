@@ -37,6 +37,9 @@
           <el-menu-item v-if="can('order_management')" index="/orders"
             >采购下单</el-menu-item
           >
+          <el-menu-item v-if="can('supplier_order_view')" index="/supplier-orders"
+            >采购订单</el-menu-item
+          >
         </el-sub-menu>
         <el-sub-menu
           v-if="can('sales_order_management') || can('sales_summary') || can('wecom_management') || can('complaint_management')"
@@ -147,6 +150,7 @@ const hasProcurementMenu = computed(() =>
     "quote_management",
     "analysis",
     "order_management",
+    "supplier_order_view",
   ].some(can),
 );
 const roleLabel = computed(

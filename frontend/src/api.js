@@ -42,6 +42,7 @@ export const getAIAnalysisQueryRecords = (params) => request.get('/api/analysis/
 export const getOrders = () => request.get('/api/orders')
 export const getPurchaseRequisitions = params => request.get('/api/orders/requisitions', { params })
 export const generateOrdersFromRequisition = id => request.post(`/api/orders/requisitions/${id}/generate`)
+export const getSupplierOrders = () => request.get('/api/supplier/orders')
 export const getOrderOptions = (supplierId) => request.get('/api/orders/options', { params: { supplier_id: supplierId } })
 export const createOrder = (data) => request.post('/api/orders', data)
 export const updateOrder = (id, data) => request.put(`/api/orders/${id}`, data)
