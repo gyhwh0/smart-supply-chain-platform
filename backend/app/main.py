@@ -31,6 +31,7 @@ from app.wecom_router import router as wecom_router
 from app.inbound_router import router as inbound_router
 from app.picking_router import router as picking_router
 from app.warehouse_router import router as warehouse_router
+from app.mini_router import router as mini_router
 from app.models import (
     Category, Complaint, Customer, LogisticsStaff, Product, ProductSupplier, ProductUnit,
     AIAnalysisQueryLog, InventoryQueryLog, PurchaseOrder, PurchaseOrderItem, PurchaseRequisition, PurchaseRequisitionOrder, Quote,
@@ -82,6 +83,7 @@ app.include_router(wecom_router)
 app.include_router(inbound_router)
 app.include_router(picking_router)
 app.include_router(warehouse_router)
+app.include_router(mini_router)
 app.include_router(finance_router.router)
 app.add_middleware(
     CORSMiddleware,
@@ -123,6 +125,10 @@ def startup():
             "quality_report_name": "VARCHAR(255) NULL",
             "quality_report_path": "VARCHAR(255) NULL",
             "quality_report_content_type": "VARCHAR(100) NULL",
+            "image_name": "VARCHAR(255) NULL",
+            "image_path": "VARCHAR(255) NULL",
+            "image_content_type": "VARCHAR(100) NULL",
+            "mini_visible": "BOOLEAN NOT NULL DEFAULT 1",
         },
         "sales_order_items": {
             "display_name": "VARCHAR(120) NULL",
@@ -905,6 +911,46 @@ def update_product(
 
 QUALITY_REPORT_DIR = Path(__file__).resolve().parent.parent / "uploads" / "quality_reports"
 QUALITY_REPORT_TYPES = {"application/pdf", "image/jpeg", "image/png", "image/webp"}
+PRODUCT_IMAGE_DIR = Path(__file__).resolve().parent.parent / "uploads" / "product_images"
+PRODUCT_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+
+
+@app.post("/api/products/{product_id}/image")
+async def upload_product_image(
+    product_id: int,
+    file: UploadFile = File(...),
+    _: User = Depends(require_permission("product_management")),
+    db: Session = Depends(get_db),
+):
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="商品不存在")
+    content_type = file.content_type or ""
+    if content_type not in PRODUCT_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail="商品图片仅支持 JPG、PNG 或 WEBP")
+    content = await file.read()
+    if not content or len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="商品图片不能为空且不能超过5MB")
+    suffix = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}[content_type]
+    PRODUCT_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    stored_name = f"product-{product_id}-{uuid4().hex}{suffix}"
+    (PRODUCT_IMAGE_DIR / stored_name).write_bytes(content)
+    product.image_name = (file.filename or f"商品图片{suffix}")[:255]
+    product.image_path = stored_name
+    product.image_content_type = content_type
+    db.commit()
+    return {"message": "商品图片上传成功", "name": product.image_name, "url": product.image_url}
+
+
+@app.get("/api/mini/products/{product_id}/image")
+def product_image(product_id: int, db: Session = Depends(get_db)):
+    product = db.get(Product, product_id)
+    if not product or not product.image_path:
+        raise HTTPException(status_code=404, detail="商品尚未上传图片")
+    target = PRODUCT_IMAGE_DIR / Path(product.image_path).name
+    if not target.exists():
+        raise HTTPException(status_code=404, detail="商品图片文件不存在")
+    return FileResponse(target, media_type=product.image_content_type or "image/jpeg")
 
 
 @app.post("/api/products/{product_id}/quality-report")

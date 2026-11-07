@@ -1,0 +1,14 @@
+{
+  "pages": ["pages/products/index", "pages/cart/index", "pages/orders/index", "pages/profile/index", "pages/bind/index"],
+  "window": {"navigationBarTitleText":"嘉采订货","navigationBarBackgroundColor":"#1677ff","navigationBarTextStyle":"white","backgroundColor":"#f5f7fa"},
+  "tabBar": {
+    "color":"#8492a6","selectedColor":"#1677ff","backgroundColor":"#ffffff",
+    "list":[
+      {"pagePath":"pages/products/index","text":"商品"},
+      {"pagePath":"pages/cart/index","text":"购物车"},
+      {"pagePath":"pages/orders/index","text":"订单"},
+      {"pagePath":"pages/profile/index","text":"我的"}
+    ]
+  },
+  "style":"v2","sitemapLocation":"sitemap.json"
+}

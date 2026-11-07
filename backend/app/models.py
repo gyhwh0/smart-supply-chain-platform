@@ -69,6 +69,10 @@ class Product(Base):
     quality_report_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     quality_report_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
     quality_report_content_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    image_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    image_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    image_content_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    mini_visible: Mapped[bool] = mapped_column(Boolean, default=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     units: Mapped[list["ProductUnit"]] = relationship(
@@ -100,6 +104,10 @@ class Product(Base):
     @property
     def quality_report_url(self) -> str | None:
         return f"/api/products/{self.id}/quality-report" if self.quality_report_path else None
+
+    @property
+    def image_url(self) -> str | None:
+        return f"/api/mini/products/{self.id}/image" if self.image_path else None
 
 
 class ProductUnit(Base):
@@ -625,3 +633,28 @@ class Complaint(Base):
     customer: Mapped[Customer] = relationship()
     assignee: Mapped[User | None] = relationship(foreign_keys=[assigned_to])
     sales_order: Mapped[SalesOrder | None] = relationship()
+
+
+class MiniProgramUser(Base):
+    __tablename__ = "mini_program_users"
+
+    openid: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    unionid: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id"), nullable=True)
+    nickname: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    customer: Mapped[Customer | None] = relationship()
+    orders: Mapped[list["MiniProgramOrder"]] = relationship(back_populates="user")
+
+
+class MiniProgramOrder(Base):
+    __tablename__ = "mini_program_orders"
+
+    mini_user_id: Mapped[int] = mapped_column(ForeignKey("mini_program_users.id"))
+    sales_order_id: Mapped[int] = mapped_column(ForeignKey("sales_orders.id"))
+    external_order_no: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+
+    user: Mapped[MiniProgramUser] = relationship(back_populates="orders")
+    sales_order: Mapped[SalesOrder] = relationship()

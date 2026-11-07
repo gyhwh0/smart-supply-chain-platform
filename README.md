@@ -224,6 +224,10 @@ WECOM_ENCODING_AES_KEY=
 VOICE_API_KEY=
 VOICE_MODEL=
 VOICE_BASE_URL=
+
+# 微信小程序（只配置在服务器，不要提交真实值）
+MINI_PROGRAM_APP_ID=
+MINI_PROGRAM_APP_SECRET=
 ```
 
 `SKIP_LOGIN=true` 仅适合本地调试。生产环境必须关闭免登录、修改默认账号密码，并配置足够强度的 `JWT_SECRET_KEY`。
@@ -263,6 +267,10 @@ https://your-domain.example/api/wecom/callback
 ```
 
 回调 Token、EncodingAESKey、企业 ID 和 Secret 只保存在服务器 `.env` 中。配置完成后，可在“企业微信订单助手”查看接入状态、客户绑定、原始消息、订单草稿和投诉记录。
+
+## 微信商家订货小程序
+
+`mini-program/` 是原生微信小程序，可直接使用微信开发者工具导入。小程序商品、图片、单位价格和客户专属名称来自后台商品管理；商家通过客户编号和预留手机号绑定，下单后直接生成销售单，同一客户同一配送日的加单自动合并，并继续联动采购、仓库、分拣和财务。正式发布需要已备案的 HTTPS 域名，并在微信公众平台配置合法请求域名。具体步骤见 `mini-program/README.md`。
 
 ## 生产部署建议
 

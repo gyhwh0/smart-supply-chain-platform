@@ -1,0 +1,2 @@
+const request=require('../../utils/request')
+Page({data:{orders:[]},onShow(){this.load()},onPullDownRefresh(){this.load().finally(wx.stopPullDownRefresh)},async load(){try{const rows=await request('/api/mini/orders');this.setData({orders:rows.map(row=>({...row,statusText:{draft:'待确认',confirmed:'已确认'}[row.status]||row.status}))})}catch(error){if(String(error.message).includes('绑定'))wx.navigateTo({url:'/pages/bind/index'});else wx.showToast({title:error.message,icon:'none'})}}})

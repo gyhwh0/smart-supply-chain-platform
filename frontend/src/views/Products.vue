@@ -20,6 +20,7 @@
       </div>
       <el-table :data="filteredRows" @selection-change="selected = $event" empty-text="没有找到符合条件的商品">
         <el-table-column v-if="!isSupplier" type="selection" width="46" />
+        <el-table-column label="图片" width="76"><template #default="scope"><el-image v-if="scope.row.image_url" :src="scope.row.image_url" fit="cover" class="product-thumb" :preview-src-list="[scope.row.image_url]" preview-teleported/><div v-else class="product-placeholder">暂无</div></template></el-table-column>
         <el-table-column prop="name" label="商品名称" min-width="150" />
         <el-table-column label="别名" min-width="170"><template #default="scope"><el-tag v-for="alias in scope.row.aliases" :key="alias" type="info" class="unit-tag">{{alias}}</el-tag><span v-if="!scope.row.aliases.length" class="muted">—</span></template></el-table-column>
         <el-table-column prop="category" label="品类" min-width="120" />
@@ -29,7 +30,7 @@
         <el-table-column label="保管要求" min-width="190"><template #default="scope"><div>{{scope.row.shelf_life_days ? `保质期 ${scope.row.shelf_life_days} 天` : '保质期未设置'}}</div><small class="muted">{{temperatureText(scope.row)}} · 损耗 {{scope.row.loss_rate??0}}%</small></template></el-table-column>
         <el-table-column label="质检报告" width="110"><template #default="scope"><el-button v-if="scope.row.quality_report_url" link type="primary" @click="downloadReport(scope.row)">查看报告</el-button><span v-else class="muted">未上传</span></template></el-table-column>
         <el-table-column v-if="!isSupplier" label="已绑定供应商" min-width="210"><template #default="scope"><el-tag v-for="id in scope.row.supplier_ids" :key="id" type="info" class="unit-tag">{{ supplierName(id) }}</el-tag><span v-if="!scope.row.supplier_ids.length" class="muted">暂未绑定</span></template></el-table-column>
-        <el-table-column label="状态" width="90"><template #default="scope"><el-tag :type="scope.row.active ? 'success' : 'info'">{{ scope.row.active ? '启用' : '停用' }}</el-tag></template></el-table-column>
+        <el-table-column label="状态" width="130"><template #default="scope"><el-tag :type="scope.row.active ? 'success' : 'info'">{{ scope.row.active ? '启用' : '停用' }}</el-tag><el-tag v-if="scope.row.mini_visible" type="primary" class="mini-tag">小程序</el-tag></template></el-table-column>
         <el-table-column v-if="!isSupplier" label="操作" width="250" fixed="right">
           <template #default="scope">
             <el-button link type="primary" @click="openEdit(scope.row)">编辑商品</el-button>
@@ -55,6 +56,7 @@
         <el-row :gutter="14"><el-col :span="8"><el-form-item label="保质期（天）"><el-input-number v-model="form.shelf_life_days" :min="1" style="width:100%"/></el-form-item></el-col><el-col :span="8"><el-form-item label="最低温度（℃）"><el-input-number v-model="form.storage_temperature_min" :precision="1" style="width:100%"/></el-form-item></el-col><el-col :span="8"><el-form-item label="最高温度（℃）"><el-input-number v-model="form.storage_temperature_max" :precision="1" style="width:100%"/></el-form-item></el-col></el-row>
         <el-row :gutter="14"><el-col :span="8"><el-form-item label="标准损耗率（%）"><el-input-number v-model="form.loss_rate" :min="0" :max="100" :precision="2" style="width:100%"/></el-form-item></el-col><el-col :span="16"><el-form-item label="储存说明"><el-input v-model="form.storage_notes" placeholder="如：冷藏避光、开封后24小时内使用"/></el-form-item></el-col></el-row>
         <el-form-item v-if="form.id" label="质检报告"><el-upload :show-file-list="false" :http-request="uploadReport" accept=".pdf,.jpg,.jpeg,.png,.webp"><el-button type="primary" plain>{{form.quality_report_name?'重新上传':'上传质检报告'}}</el-button></el-upload><span v-if="form.quality_report_name" class="report-name">{{form.quality_report_name}}</span><div class="binding-help">支持 PDF、JPG、PNG、WEBP，最大10MB。</div></el-form-item>
+        <el-form-item v-if="form.id" label="商品图片"><el-upload :show-file-list="false" :http-request="uploadImage" accept=".jpg,.jpeg,.png,.webp"><el-button type="primary" plain>{{form.image_name?'更换图片':'上传商品图片'}}</el-button></el-upload><el-image v-if="form.image_url" :src="form.image_url" fit="cover" class="form-product-image"/><span v-if="form.image_name" class="report-name">{{form.image_name}}</span><div class="binding-help">用于小程序商品列表，支持 JPG、PNG、WEBP，最大5MB。</div></el-form-item>
         <el-divider>客户专属商品名称</el-divider>
         <div class="binding-help alias-help">例如：系统商品“土豆”为客户 k500h 设置“马铃薯”，该客户的微信识别和销售单均显示“马铃薯”。</div>
         <div v-for="(row,index) in form.customer_aliases" :key="index" class="customer-alias-row"><el-select v-model="row.customer_id" filterable placeholder="选择客户"><el-option v-for="customer in customers" :key="customer.id" :label="`${customer.customer_code||'无编号'} · ${customer.name}`" :value="customer.id"/></el-select><el-input v-model="row.alias" placeholder="该客户的专属名称"/><el-button link type="danger" @click="form.customer_aliases.splice(index,1)">删除</el-button></div>
@@ -66,6 +68,7 @@
           </el-select>
           <div class="binding-help">保存后会自动生成商品分配；标注“已分配”的供应商表示此前已经绑定。</div>
         </el-form-item>
+        <el-form-item label="小程序上架"><el-switch v-model="form.mini_visible" active-text="上架" inactive-text="下架" /><span class="field-tip">下架后只影响商家小程序，后台历史单据不受影响。</span></el-form-item>
         <el-form-item v-if="form.id" label="状态"><el-switch v-model="form.active" active-text="启用" inactive-text="停用" /></el-form-item>
         <el-divider>多单位与价格管理</el-divider>
         <el-alert title="先确定最小常用单位为基础单位。换算率表示“1个当前单位包含多少个基础单位”，例如基础单位是瓶，1箱=12瓶，则箱的换算率填12。" type="info" :closable="false" show-icon class="unit-guide" />
@@ -91,7 +94,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { addProductUnit, batchDeleteProducts, createProduct, deleteProduct, downloadProductQualityReport, getAssignments, getCategories, getCustomers, getProducts, getSuppliers, updateProduct, updateProductUnitPrices, uploadProductQualityReport } from '@/api'
+import { addProductUnit, batchDeleteProducts, createProduct, deleteProduct, downloadProductQualityReport, getAssignments, getCategories, getCustomers, getProducts, getSuppliers, updateProduct, updateProductUnitPrices, uploadProductImage, uploadProductQualityReport } from '@/api'
 import { getUser } from '@/utils/auth'
 
 const isSupplier = computed(() => getUser()?.role === 'supplier')
@@ -105,7 +108,7 @@ const categoryFilter = ref(null)
 const statusFilter = ref('all')
 const originalSupplierIds = ref([])
 const visible = ref(false)
-const blank = () => ({ id: null, name: '', category: '', category_id: null, sku: '', reference_price: null, aliases: [], customer_aliases: [], shelf_life_days: null, storage_temperature_min: null, storage_temperature_max: null, loss_rate: 0, storage_notes: '', quality_report_name: null, description: '', active: true, supplier_ids: [], units: [{ name: '件', conversion_rate: 1, is_base: true, sales_price: null, reference_purchase_price: null }] })
+const blank = () => ({ id: null, name: '', category: '', category_id: null, sku: '', reference_price: null, aliases: [], customer_aliases: [], shelf_life_days: null, storage_temperature_min: null, storage_temperature_max: null, loss_rate: 0, storage_notes: '', quality_report_name: null, image_name: null, image_url: null, mini_visible: true, description: '', active: true, supplier_ids: [], units: [{ name: '件', conversion_rate: 1, is_base: true, sales_price: null, reference_purchase_price: null }] })
 const form = reactive(blank())
 const selectableCategories = computed(() => categories.value.filter(item => item.active || item.id === form.category_id))
 const activeSuppliers = computed(() => suppliers.value.filter(item => item.active || form.supplier_ids.includes(item.id)))
@@ -145,11 +148,12 @@ const openEdit = (row) => { Object.assign(form, blank(), row, { supplier_ids: [.
 const setBase = (index) => { if (form.units[index].is_base) form.units.forEach((unit, current) => { unit.is_base = current === index }) }
 const addUnitRow = () => form.units.push({ id:null, name:'', conversion_rate:1, is_base:false, sales_price:null, reference_purchase_price:null })
 const unitMeaning = unit => { const base=form.units.find(item=>item.is_base)?.name||'基础单位'; return unit.is_base?`计价基础：1 ${unit.name||base}`:`1 ${unit.name||'当前单位'} = ${Number(unit.conversion_rate||1).toLocaleString('zh-CN',{maximumFractionDigits:4})} ${base}` }
-const productPayload = () => ({ name: form.name.trim(), category: form.category, category_id: form.category_id, sku: form.sku?.trim() || null, reference_price: form.reference_price, aliases:form.aliases.map(v=>v.trim()).filter(Boolean), customer_aliases:form.customer_aliases.filter(v=>v.customer_id&&v.alias.trim()).map(v=>({customer_id:v.customer_id,alias:v.alias.trim()})), shelf_life_days:form.shelf_life_days, storage_temperature_min:form.storage_temperature_min, storage_temperature_max:form.storage_temperature_max, loss_rate:form.loss_rate, storage_notes:form.storage_notes?.trim()||null, description: form.description || null, active: form.active, supplier_ids: form.supplier_ids })
+const productPayload = () => ({ name: form.name.trim(), category: form.category, category_id: form.category_id, sku: form.sku?.trim() || null, reference_price: form.reference_price, aliases:form.aliases.map(v=>v.trim()).filter(Boolean), customer_aliases:form.customer_aliases.filter(v=>v.customer_id&&v.alias.trim()).map(v=>({customer_id:v.customer_id,alias:v.alias.trim()})), shelf_life_days:form.shelf_life_days, storage_temperature_min:form.storage_temperature_min, storage_temperature_max:form.storage_temperature_max, loss_rate:form.loss_rate, storage_notes:form.storage_notes?.trim()||null, description: form.description || null, active: form.active, mini_visible: form.mini_visible, supplier_ids: form.supplier_ids })
 const temperatureText=row=>row.storage_temperature_min==null&&row.storage_temperature_max==null?'温度未设置':`${row.storage_temperature_min??'—'}～${row.storage_temperature_max??'—'}℃`
 const effectiveSalesPrice=(product,unit)=>unit.sales_price??(product.reference_price==null?null:Number(product.reference_price)*Number(unit.conversion_rate||1))
 const priceText=value=>value==null?'未设置':`¥${Number(value).toFixed(2)}`
 const uploadReport=async({file})=>{await uploadProductQualityReport(form.id,file);ElMessage.success('质检报告上传成功');await load();const updated=rows.value.find(item=>item.id===form.id);if(updated)Object.assign(form,{quality_report_name:updated.quality_report_name,quality_report_url:updated.quality_report_url})}
+const uploadImage=async({file})=>{await uploadProductImage(form.id,file);ElMessage.success('商品图片上传成功');await load();const updated=rows.value.find(item=>item.id===form.id);if(updated)Object.assign(form,{image_name:updated.image_name,image_url:`${updated.image_url}?v=${Date.now()}`})}
 const downloadReport=async row=>{const blob=await downloadProductQualityReport(row.id);const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=row.quality_report_name||`${row.name}-质检报告`;link.click();URL.revokeObjectURL(url)}
 const save = async () => {
   if (!form.name.trim()) return ElMessage.warning('请输入商品名称')
@@ -201,6 +205,7 @@ onMounted(load)
 .header-actions { display: flex; gap: 10px; }
 .product-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}.product-search{width:min(440px,100%)}.filter-select{width:170px}.status-select{width:130px}.result-count{margin-left:auto;color:#7d8999;font-size:13px;white-space:nowrap}
 .muted, .binding-help { color: #9099a8; font-size: 13px; }
+.product-thumb{width:48px;height:48px;border-radius:8px}.product-placeholder{width:48px;height:48px;border-radius:8px;background:#f2f4f7;color:#a4adba;font-size:11px;display:flex;align-items:center;justify-content:center}.form-product-image{width:76px;height:76px;border-radius:10px;margin-left:12px;vertical-align:middle}.mini-tag{margin-left:4px}.report-name{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .binding-help { margin-top: 6px; }
 :global(.el-select-dropdown__item.assigned-option) { color: #a0a8b5; background: #f3f5f8; }
 @media (max-width:760px){.product-search,.filter-select,.status-select{width:100%}.result-count{margin-left:0}.unit-row{grid-template-columns:1fr 1fr}.unit-row-head{display:none}.unit-meaning{grid-column:1/-1}}

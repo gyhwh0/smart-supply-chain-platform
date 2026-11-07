@@ -1,0 +1,13 @@
+{
+  "description": "嘉采商家订货小程序",
+  "miniprogramRoot": "./",
+  "projectname": "jiacai-order",
+  "appid": "touristappid",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "postcss": true,
+    "minified": true
+  },
+  "compileType": "miniprogram"
+}

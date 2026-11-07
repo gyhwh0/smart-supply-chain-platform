@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     VOICE_API_KEY: str = ""
     VOICE_MODEL: str = "whisper-1"
     VOICE_BASE_URL: str = "https://api.openai.com/v1"
+    MINI_PROGRAM_APP_ID: str = ""
+    MINI_PROGRAM_APP_SECRET: str = ""
     SKIP_LOGIN: bool = True
 
     model_config = SettingsConfigDict(

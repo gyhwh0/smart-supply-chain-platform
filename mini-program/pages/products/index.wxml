@@ -1,0 +1,12 @@
+<view class="page">
+  <view class="search"><input value="{{keyword}}" placeholder="搜索商品、别名或 SKU" bindinput="onKeyword"/><text bindtap="search">搜索</text></view>
+  <scroll-view scroll-x class="categories"><text class="{{category===''?'active':''}}" data-value="" bindtap="chooseCategory">全部</text><text wx:for="{{categories}}" wx:key="*this" class="{{category===item?'active':''}}" data-value="{{item}}" bindtap="chooseCategory">{{item}}</text></scroll-view>
+  <view wx:if="{{!loading && !products.length}}" class="empty">暂无可订购商品</view>
+  <view wx:for="{{products}}" wx:key="id" class="product card">
+    <image wx:if="{{item.image_url}}" src="{{apiBase + item.image_url}}" mode="aspectFill"/><view wx:else class="no-image">暂无图片</view>
+    <view class="content"><view class="name">{{item.name}}</view><view class="muted category">{{item.category}} · {{item.sku || '无 SKU'}}</view><view class="desc">{{item.description || item.storage_notes || '新鲜食材，价格以当前页面为准'}}</view>
+      <picker range="{{item.units}}" range-key="label" data-index="{{index}}" bindchange="chooseUnit"><view class="unit">{{item.units[item.unitIndex].label}}</view></picker>
+      <view class="bottom"><text class="price">¥{{item.units[item.unitIndex].priceText}}</text><button size="mini" class="primary" data-index="{{index}}" bindtap="addCart" disabled="{{!item.units[item.unitIndex].available}}">加入购物车</button></view>
+    </view>
+  </view>
+</view>

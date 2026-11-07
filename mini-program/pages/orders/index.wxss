@@ -1,0 +1,1 @@
+.head,.line,.amount{display:flex;justify-content:space-between;align-items:center}.head{margin-bottom:8rpx}.number{font-weight:700}.status{color:#1677ff}.line{padding:16rpx 0;border-bottom:1rpx solid #f0f2f5;font-size:25rpx}.line text:first-child{width:45%}.amount{justify-content:flex-end;padding-top:18rpx}.amount .price{font-size:34rpx;margin-left:10rpx}

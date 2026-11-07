@@ -133,6 +133,7 @@ class ProductCreate(BaseModel):
     storage_notes: str | None = None
     units: list[UnitIn]
     supplier_ids: list[int] = Field(default_factory=list)
+    mini_visible: bool = True
 
 
 class ProductUpdate(BaseModel):
@@ -151,6 +152,7 @@ class ProductUpdate(BaseModel):
     storage_notes: str | None = None
     active: bool = True
     supplier_ids: list[int] = Field(default_factory=list)
+    mini_visible: bool = True
 
 
 class ProductOut(BaseModel):
@@ -171,6 +173,9 @@ class ProductOut(BaseModel):
     storage_notes: str | None
     quality_report_name: str | None
     quality_report_url: str | None
+    image_name: str | None
+    image_url: str | None
+    mini_visible: bool
     active: bool
     units: list[UnitOut]
     supplier_ids: list[int] = Field(default_factory=list)

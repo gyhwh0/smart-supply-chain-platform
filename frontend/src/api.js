@@ -32,6 +32,11 @@ export const uploadProductQualityReport = (id, file) => {
   return request.post(`/api/products/${id}/quality-report`, data, { headers: { 'Content-Type': 'multipart/form-data' } })
 }
 export const downloadProductQualityReport = (id) => request.get(`/api/products/${id}/quality-report`, { responseType: 'blob' })
+export const uploadProductImage = (id, file) => {
+  const data = new FormData()
+  data.append('file', file)
+  return request.post(`/api/products/${id}/image`, data, { headers: { 'Content-Type': 'multipart/form-data' } })
+}
 export const getAssignments = () => request.get('/api/assignments')
 export const createAssignments = (data) => request.post('/api/assignments', data)
 export const saveQuote = (assignmentId, data) => request.put(`/api/quotes/${assignmentId}`, data)
