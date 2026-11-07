@@ -30,7 +30,7 @@
         <el-table-column label="保管要求" min-width="190"><template #default="scope"><div>{{scope.row.shelf_life_days ? `保质期 ${scope.row.shelf_life_days} 天` : '保质期未设置'}}</div><small class="muted">{{temperatureText(scope.row)}} · 损耗 {{scope.row.loss_rate??0}}%</small></template></el-table-column>
         <el-table-column label="质检报告" width="110"><template #default="scope"><el-button v-if="scope.row.quality_report_url" link type="primary" @click="downloadReport(scope.row)">查看报告</el-button><span v-else class="muted">未上传</span></template></el-table-column>
         <el-table-column v-if="!isSupplier" label="已绑定供应商" min-width="210"><template #default="scope"><el-tag v-for="id in scope.row.supplier_ids" :key="id" type="info" class="unit-tag">{{ supplierName(id) }}</el-tag><span v-if="!scope.row.supplier_ids.length" class="muted">暂未绑定</span></template></el-table-column>
-        <el-table-column label="状态" width="130"><template #default="scope"><el-tag :type="scope.row.active ? 'success' : 'info'">{{ scope.row.active ? '启用' : '停用' }}</el-tag><el-tag v-if="scope.row.mini_visible" type="primary" class="mini-tag">小程序</el-tag></template></el-table-column>
+        <el-table-column label="状态" min-width="190"><template #default="scope"><el-tag :type="scope.row.active ? 'success' : 'info'">{{ scope.row.active ? '启用' : '停用' }}</el-tag><el-tag v-if="scope.row.mini_visible" type="primary" class="mini-tag">{{scope.row.mini_all_customers?'小程序·全部客户':`小程序·${scope.row.mini_customer_ids.length}个客户`}}</el-tag><el-tag v-else type="info" class="mini-tag">小程序下架</el-tag></template></el-table-column>
         <el-table-column v-if="!isSupplier" label="操作" width="250" fixed="right">
           <template #default="scope">
             <el-button link type="primary" @click="openEdit(scope.row)">编辑商品</el-button>
@@ -69,6 +69,10 @@
           <div class="binding-help">保存后会自动生成商品分配；标注“已分配”的供应商表示此前已经绑定。</div>
         </el-form-item>
         <el-form-item label="小程序上架"><el-switch v-model="form.mini_visible" active-text="上架" inactive-text="下架" /><span class="field-tip">下架后只影响商家小程序，后台历史单据不受影响。</span></el-form-item>
+        <template v-if="form.mini_visible">
+          <el-form-item label="可见范围"><el-radio-group v-model="form.mini_all_customers"><el-radio-button :value="true">全部客户</el-radio-button><el-radio-button :value="false">指定客户</el-radio-button></el-radio-group></el-form-item>
+          <el-form-item v-if="!form.mini_all_customers" label="分配客户"><el-select v-model="form.mini_customer_ids" multiple filterable collapse-tags collapse-tags-tooltip placeholder="选择能在小程序看到该商品的客户" style="width:100%"><el-option v-for="customer in customers.filter(item=>item.active)" :key="customer.id" :value="customer.id" :label="`${customer.customer_code||'无编号'} · ${customer.name}`"/></el-select><div class="binding-help">未分配给任何客户时，该商品不会在小程序显示。</div></el-form-item>
+        </template>
         <el-form-item v-if="form.id" label="状态"><el-switch v-model="form.active" active-text="启用" inactive-text="停用" /></el-form-item>
         <el-divider>多单位与价格管理</el-divider>
         <el-alert title="先确定最小常用单位为基础单位。换算率表示“1个当前单位包含多少个基础单位”，例如基础单位是瓶，1箱=12瓶，则箱的换算率填12。" type="info" :closable="false" show-icon class="unit-guide" />
@@ -108,7 +112,7 @@ const categoryFilter = ref(null)
 const statusFilter = ref('all')
 const originalSupplierIds = ref([])
 const visible = ref(false)
-const blank = () => ({ id: null, name: '', category: '', category_id: null, sku: '', reference_price: null, aliases: [], customer_aliases: [], shelf_life_days: null, storage_temperature_min: null, storage_temperature_max: null, loss_rate: 0, storage_notes: '', quality_report_name: null, image_name: null, image_url: null, mini_visible: true, description: '', active: true, supplier_ids: [], units: [{ name: '件', conversion_rate: 1, is_base: true, sales_price: null, reference_purchase_price: null }] })
+const blank = () => ({ id: null, name: '', category: '', category_id: null, sku: '', reference_price: null, aliases: [], customer_aliases: [], shelf_life_days: null, storage_temperature_min: null, storage_temperature_max: null, loss_rate: 0, storage_notes: '', quality_report_name: null, image_name: null, image_url: null, mini_visible: true, mini_all_customers: false, mini_customer_ids: [], description: '', active: true, supplier_ids: [], units: [{ name: '件', conversion_rate: 1, is_base: true, sales_price: null, reference_purchase_price: null }] })
 const form = reactive(blank())
 const selectableCategories = computed(() => categories.value.filter(item => item.active || item.id === form.category_id))
 const activeSuppliers = computed(() => suppliers.value.filter(item => item.active || form.supplier_ids.includes(item.id)))
@@ -144,11 +148,11 @@ const openCreate = () => {
   form.category_id = categories.value.find(item => item.active)?.id ?? null
   visible.value = true
 }
-const openEdit = (row) => { Object.assign(form, blank(), row, { supplier_ids: [...row.supplier_ids], aliases:[...row.aliases], customer_aliases:row.customer_aliases.map(item=>({...item})), units:row.units.map(unit=>({...unit})) }); originalSupplierIds.value = [...row.supplier_ids]; visible.value = true }
+const openEdit = (row) => { Object.assign(form, blank(), row, { supplier_ids: [...row.supplier_ids], mini_customer_ids:[...(row.mini_customer_ids||[])], aliases:[...row.aliases], customer_aliases:row.customer_aliases.map(item=>({...item})), units:row.units.map(unit=>({...unit})) }); originalSupplierIds.value = [...row.supplier_ids]; visible.value = true }
 const setBase = (index) => { if (form.units[index].is_base) form.units.forEach((unit, current) => { unit.is_base = current === index }) }
 const addUnitRow = () => form.units.push({ id:null, name:'', conversion_rate:1, is_base:false, sales_price:null, reference_purchase_price:null })
 const unitMeaning = unit => { const base=form.units.find(item=>item.is_base)?.name||'基础单位'; return unit.is_base?`计价基础：1 ${unit.name||base}`:`1 ${unit.name||'当前单位'} = ${Number(unit.conversion_rate||1).toLocaleString('zh-CN',{maximumFractionDigits:4})} ${base}` }
-const productPayload = () => ({ name: form.name.trim(), category: form.category, category_id: form.category_id, sku: form.sku?.trim() || null, reference_price: form.reference_price, aliases:form.aliases.map(v=>v.trim()).filter(Boolean), customer_aliases:form.customer_aliases.filter(v=>v.customer_id&&v.alias.trim()).map(v=>({customer_id:v.customer_id,alias:v.alias.trim()})), shelf_life_days:form.shelf_life_days, storage_temperature_min:form.storage_temperature_min, storage_temperature_max:form.storage_temperature_max, loss_rate:form.loss_rate, storage_notes:form.storage_notes?.trim()||null, description: form.description || null, active: form.active, mini_visible: form.mini_visible, supplier_ids: form.supplier_ids })
+const productPayload = () => ({ name: form.name.trim(), category: form.category, category_id: form.category_id, sku: form.sku?.trim() || null, reference_price: form.reference_price, aliases:form.aliases.map(v=>v.trim()).filter(Boolean), customer_aliases:form.customer_aliases.filter(v=>v.customer_id&&v.alias.trim()).map(v=>({customer_id:v.customer_id,alias:v.alias.trim()})), shelf_life_days:form.shelf_life_days, storage_temperature_min:form.storage_temperature_min, storage_temperature_max:form.storage_temperature_max, loss_rate:form.loss_rate, storage_notes:form.storage_notes?.trim()||null, description: form.description || null, active: form.active, mini_visible: form.mini_visible, mini_all_customers: form.mini_all_customers, mini_customer_ids:form.mini_all_customers?[]:form.mini_customer_ids, supplier_ids: form.supplier_ids })
 const temperatureText=row=>row.storage_temperature_min==null&&row.storage_temperature_max==null?'温度未设置':`${row.storage_temperature_min??'—'}～${row.storage_temperature_max??'—'}℃`
 const effectiveSalesPrice=(product,unit)=>unit.sales_price??(product.reference_price==null?null:Number(product.reference_price)*Number(unit.conversion_rate||1))
 const priceText=value=>value==null?'未设置':`¥${Number(value).toFixed(2)}`
@@ -180,7 +184,7 @@ const toggle = async (row) => {
   await load()
 }
 const remove = async (row) => {
-  await ElMessageBox.confirm(`确认删除“${row.name}”吗？若已有分配或报价，将改为安全禁用并保留历史数据。`, '删除商品', { type: 'warning' })
+  await ElMessageBox.confirm(`确认提交商品“${row.name}”的删除申请吗？管理员审核前不会删除。`, '提交删除申请', { type: 'warning' })
   const result = await deleteProduct(row.id)
   ElMessage.success(result.message)
   await load()
@@ -188,7 +192,7 @@ const remove = async (row) => {
 const supplierName = id => suppliers.value.find(item => item.id === id)?.name || `供应商 #${id}`
 const supplierOptionLabel = supplier => `${supplier.name}${originalSupplierIds.value.includes(supplier.id) ? '（已分配）' : ''}`
 const batchRemove = async () => {
-  await ElMessageBox.confirm(`确认批量处理选中的 ${selected.value.length} 个商品吗？有历史数据的商品将安全禁用。`, '批量删除', { type: 'warning' })
+  await ElMessageBox.confirm(`确认提交选中的 ${selected.value.length} 个商品的删除申请吗？`, '批量提交删除申请', { type: 'warning' })
   const result = await batchDeleteProducts(selected.value.map(item => item.id))
   ElMessage.success(result.message)
   await load()

@@ -18,7 +18,7 @@ from app.models import (
     WeComOrderDraftItem,
 )
 from app.schemas import ComplaintCreate, ComplaintUpdate, WeComBindingCreate, WeComSimulateMessage
-from app import wecom_service
+from app import deletion_service, wecom_service
 
 
 router = APIRouter(prefix="/api", tags=["企业微信"])
@@ -227,15 +227,13 @@ def save_binding(
 @router.delete("/wecom/bindings/{binding_id}")
 def delete_binding(
     binding_id: int,
-    _: User = Depends(require_permission("wecom_management")),
+    user: User = Depends(require_permission("wecom_management")),
     db: Session = Depends(get_db),
 ):
     binding = db.get(WeComCustomerBinding, binding_id)
     if not binding:
         raise HTTPException(status_code=404, detail="绑定记录不存在")
-    db.delete(binding)
-    db.commit()
-    return {"message": "微信客户绑定已解除"}
+    return deletion_service.queue_deletion(db, entity_type="wecom_binding", entity_id=binding.id, entity_label=f"微信客户 {binding.external_userid}", requester=user)
 
 
 @router.get("/wecom/messages")
@@ -568,12 +566,10 @@ def update_complaint(
 @router.delete("/complaints/{complaint_id}")
 def delete_complaint(
     complaint_id: int,
-    _: User = Depends(require_permission("complaint_management")),
+    user: User = Depends(require_permission("complaint_management")),
     db: Session = Depends(get_db),
 ):
     complaint = db.get(Complaint, complaint_id)
     if not complaint:
         raise HTTPException(status_code=404, detail="投诉记录不存在")
-    db.delete(complaint)
-    db.commit()
-    return {"message": "投诉记录已删除"}
+    return deletion_service.queue_deletion(db, entity_type="complaint", entity_id=complaint.id, entity_label=complaint.complaint_no, requester=user)

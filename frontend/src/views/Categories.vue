@@ -59,13 +59,13 @@ const toggle = async (row) => {
   await load()
 }
 const remove = async (row) => {
-  await ElMessageBox.confirm(`确认删除“${row.name}”吗？若已有商品，系统会改为安全禁用。`, '删除分类', { type: 'warning' })
+  await ElMessageBox.confirm(`确认提交分类“${row.name}”的删除申请吗？管理员审核前不会删除。`, '提交删除申请', { type: 'warning' })
   const result = await deleteCategory(row.id)
   ElMessage.success(result.message)
   await load()
 }
 const batchRemove = async () => {
-  await ElMessageBox.confirm(`确认批量处理选中的 ${selected.value.length} 个分类吗？有关联商品时将安全禁用。`, '批量删除', { type: 'warning' })
+  await ElMessageBox.confirm(`确认提交选中的 ${selected.value.length} 个分类的删除申请吗？`, '批量提交删除申请', { type: 'warning' })
   const result = await batchDeleteCategories(selected.value.map(item => item.id))
   ElMessage.success(result.message)
   await load()

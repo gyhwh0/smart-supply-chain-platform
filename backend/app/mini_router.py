@@ -211,6 +211,13 @@ def bind_customer(
     return _profile(user, db)
 
 
+@router.post("/logout")
+def mini_logout(user: MiniProgramUser = Depends(_current_mini_user), db: Session = Depends(get_db)):
+    user.customer_id = None
+    db.commit()
+    return {"message": "已退出登录并解除当前客户绑定"}
+
+
 @router.get("/products")
 def mini_products(
     keyword: str | None = None,
@@ -221,7 +228,7 @@ def mini_products(
     customer = _bound_customer(user, db)
     statement = (
         select(Product)
-        .options(selectinload(Product.units))
+        .options(selectinload(Product.units), selectinload(Product.mini_customers))
         .where(Product.active.is_(True), Product.mini_visible.is_(True))
         .order_by(Product.category, Product.name)
     )
@@ -229,6 +236,8 @@ def mini_products(
     query = (keyword or "").strip().lower()
     output = []
     for product in products:
+        if not product.mini_all_customers and customer.id not in product.mini_customer_ids:
+            continue
         display_name = _customer_product_name(product, customer.id)
         if category and product.category != category:
             continue

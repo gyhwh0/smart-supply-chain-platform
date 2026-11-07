@@ -8,7 +8,7 @@ from app.auth import require_permission
 from app.database import get_db
 from app.models import Product, ProductUnit, User, WarehouseDocument
 from app.schemas import WarehouseDocumentIn
-from app import warehouse_service
+from app import deletion_service, warehouse_service
 
 
 router = APIRouter(prefix="/api/warehouse", tags=["仓库管理"])
@@ -100,16 +100,12 @@ def create_document(
 @router.delete("/documents/{document_id}")
 def delete_document(
     document_id: int,
-    _: User = Depends(require_permission("warehouse_management")),
+    user: User = Depends(require_permission("warehouse_management")),
     db: Session = Depends(get_db),
 ):
     document = db.get(WarehouseDocument, document_id)
     if not document:
         raise HTTPException(status_code=404, detail="仓库单据不存在")
     if document.source_type != "manual":
-        raise HTTPException(status_code=400, detail="联动生成的仓库单据不能直接删除，请修改对应来源单据")
-    db.delete(document)
-    db.flush()
-    warehouse_service.rebuild_requisitions(db)
-    db.commit()
-    return {"message": "仓库单据已删除，库存结余已重新计算"}
+        raise HTTPException(status_code=400, detail="联动生成的仓库单据不能申请删除，请修改对应来源单据")
+    return deletion_service.queue_deletion(db, entity_type="warehouse_document", entity_id=document.id, entity_label=document.document_no, requester=user)

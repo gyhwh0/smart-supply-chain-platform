@@ -38,6 +38,7 @@ ALL_PERMISSIONS = {
     "finance_management",
     "warehouse_management",
     "supplier_order_view",
+    "deletion_approval",
 }
 ROLE_PERMISSIONS = {
     # 财务数据属于敏感权限，所有角色（包括管理员）默认都不启用。

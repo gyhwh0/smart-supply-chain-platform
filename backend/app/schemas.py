@@ -134,6 +134,8 @@ class ProductCreate(BaseModel):
     units: list[UnitIn]
     supplier_ids: list[int] = Field(default_factory=list)
     mini_visible: bool = True
+    mini_all_customers: bool = False
+    mini_customer_ids: list[int] = Field(default_factory=list)
 
 
 class ProductUpdate(BaseModel):
@@ -153,6 +155,8 @@ class ProductUpdate(BaseModel):
     active: bool = True
     supplier_ids: list[int] = Field(default_factory=list)
     mini_visible: bool = True
+    mini_all_customers: bool = False
+    mini_customer_ids: list[int] = Field(default_factory=list)
 
 
 class ProductOut(BaseModel):
@@ -176,6 +180,8 @@ class ProductOut(BaseModel):
     image_name: str | None
     image_url: str | None
     mini_visible: bool
+    mini_all_customers: bool
+    mini_customer_ids: list[int] = Field(default_factory=list)
     active: bool
     units: list[UnitOut]
     supplier_ids: list[int] = Field(default_factory=list)

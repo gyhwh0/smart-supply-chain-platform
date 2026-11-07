@@ -241,7 +241,7 @@ const saveAcceptance = async () => {
   } finally { acceptanceSaving.value = false }
 }
 const confirm = async row => { await ElMessageBox.confirm(`确认销售单 ${row.order_no}？确认后不可再修改。`, '确认销售单', { type: 'warning' }); await confirmSalesOrder(row.id); ElMessage.success('销售单已确认'); await load() }
-const remove = async row => { await ElMessageBox.confirm(`确认删除销售单 ${row.order_no}？系统会先检查采购、分拣、投诉及财务关联。`, '删除销售单', { type: 'warning' }); const result = await deleteSalesOrder(row.id); ElMessage.success(result.message || '销售单已删除'); await load(); notifyBusinessUpdate({ module: 'sales-orders', action: 'delete', id: row.id }) }
+const remove = async row => { await ElMessageBox.confirm(`确认提交销售单 ${row.order_no} 的删除申请吗？管理员审核前单据不会删除。`, '提交删除申请', { type: 'warning' }); const result = await deleteSalesOrder(row.id); ElMessage.success(result.message); await load() }
 const selectedSupplierOption = row => row.supplier_options.find(item => item.supplier_id === row.supplier_id)
 const useRecommended = () => procurementItems.value.forEach(item => { if (!item.already_procured) item.supplier_id = item.recommended_supplier_id })
 const applySupplierBatch = () => {

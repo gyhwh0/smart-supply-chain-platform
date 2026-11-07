@@ -46,7 +46,7 @@ const resetFilters=async()=>{dateRange.value=[today(),today()];keyword.value='';
 const openCreate=type=>{Object.assign(form,{document_type:type,business_date:today(),warehouse:'主仓库',target_name:'',notes:'',items:[blankLine()]});visible.value=true}
 const addLine=()=>form.items.push(blankLine())
 const save=async()=>{const items=form.items.filter(i=>i.product_id);if(!items.length)return ElMessage.warning('请至少添加一个商品');if(items.some(i=>!i.unit_id||i.quantity<=0))return ElMessage.warning('请完整填写商品单位和数量');saving.value=true;try{await createWarehouseDocument({...form,target_name:form.target_name||null,notes:form.notes||null,items});ElMessage.success('仓库单据已保存，库存结余已更新');visible.value=false;await Promise.all([loadSummary(),loadDocuments()])}finally{saving.value=false}}
-const remove=async row=>{await ElMessageBox.confirm(`确认删除 ${row.document_no}？库存结余会同步重算。`,'删除仓库单据',{type:'warning'});const result=await deleteWarehouseDocument(row.id);ElMessage.success(result.message);await Promise.all([loadSummary(),loadDocuments()])}
+const remove=async row=>{await ElMessageBox.confirm(`确认提交仓库单据 ${row.document_no} 的删除申请吗？管理员审核前不会删除。`,'提交删除申请',{type:'warning'});const result=await deleteWarehouseDocument(row.id);ElMessage.success(result.message);await loadDocuments()}
 onMounted(load)
 </script>
 

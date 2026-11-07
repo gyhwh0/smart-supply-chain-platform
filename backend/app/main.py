@@ -26,7 +26,8 @@ from app.auth import (
 )
 from app.config import settings
 from app.database import Base, SessionLocal, engine, get_db
-from app import finance_router, inventory_service, picking_service, report_service, sales_order_service, sales_report_service, warehouse_service, wecom_service
+from app import deletion_service, finance_router, inventory_service, picking_service, report_service, sales_order_service, sales_report_service, warehouse_service, wecom_service
+from app.deletion_router import router as deletion_router
 from app.wecom_router import router as wecom_router
 from app.inbound_router import router as inbound_router
 from app.picking_router import router as picking_router
@@ -35,7 +36,7 @@ from app.mini_router import router as mini_router
 from app.models import (
     Category, Complaint, Customer, LogisticsStaff, Product, ProductSupplier, ProductUnit,
     AIAnalysisQueryLog, InventoryQueryLog, PurchaseOrder, PurchaseOrderItem, PurchaseRequisition, PurchaseRequisitionOrder, Quote,
-    PickingTask, SalesOrder, SalesOrderItem, SalesProcurementLink, Supplier, User, WeComOrderDraft,
+    MiniProductCustomer, PickingTask, SalesOrder, SalesOrderItem, SalesProcurementLink, Supplier, User, WeComOrderDraft,
     WeComOrderDraftItem,
 )
 from app.schemas import (
@@ -85,6 +86,7 @@ app.include_router(picking_router)
 app.include_router(warehouse_router)
 app.include_router(mini_router)
 app.include_router(finance_router.router)
+app.include_router(deletion_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -96,6 +98,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup():
+    deletion_feature_new = not inspect(engine).has_table("deletion_requests")
     Base.metadata.create_all(engine)
     required_columns = {
         "users": {"permissions": "TEXT NULL"},
@@ -129,6 +132,10 @@ def startup():
             "image_path": "VARCHAR(255) NULL",
             "image_content_type": "VARCHAR(100) NULL",
             "mini_visible": "BOOLEAN NOT NULL DEFAULT 1",
+            # Keep products from older deployments visible during the one-time
+            # schema migration. Newly created products still use the model/schema
+            # default (False) and must be explicitly allocated.
+            "mini_all_customers": "BOOLEAN NOT NULL DEFAULT 1",
         },
         "sales_order_items": {
             "display_name": "VARCHAR(120) NULL",
@@ -194,9 +201,7 @@ def startup():
             "complaint_management",
             "warehouse_management",
         }
-        managers = db.scalars(
-            select(User).where(User.role.in_({"admin", "purchaser"}), User.username != "system_admin")
-        ).all()
+        managers = db.scalars(select(User).where(User.role.in_({"admin", "purchaser"}))).all()
         changed = False
         for manager in managers:
             if manager.permissions_csv is None:
@@ -204,6 +209,9 @@ def startup():
             current = set(manager.permissions)
             if "account_management" in current and not new_manager_permissions.issubset(current):
                 manager.permissions_csv = ",".join(sorted(current | new_manager_permissions))
+                changed = True
+            if deletion_feature_new and manager.role == "admin" and "deletion_approval" not in set(manager.permissions):
+                manager.permissions_csv = ",".join(sorted(set(manager.permissions) | {"deletion_approval"}))
                 changed = True
         if changed:
             db.commit()
@@ -490,9 +498,9 @@ def delete_account(
     account = db.get(User, account_id)
     if not account:
         raise HTTPException(status_code=404, detail="账号不存在")
-    mode = remove_account(account, operator, db)
-    db.commit()
-    return {"message": "账号已删除" if mode == "deleted" else "账号存在业务历史，已安全禁用", "mode": mode}
+    if account.id == operator.id:
+        raise HTTPException(status_code=400, detail="不能申请删除当前登录账号")
+    return deletion_service.queue_deletion(db, entity_type="account", entity_id=account.id, entity_label=f"{account.name}（{account.username}）", requester=operator)
 
 
 @app.post("/api/accounts/batch-delete")
@@ -501,16 +509,14 @@ def batch_delete_accounts(
     operator: User = Depends(require_permission("account_management")),
     db: Session = Depends(get_db),
 ):
-    deleted = disabled = 0
+    queued = 0
     for account_id in set(data.ids):
         account = db.get(User, account_id)
-        if not account:
+        if not account or account.id == operator.id:
             continue
-        mode = remove_account(account, operator, db)
-        deleted += mode == "deleted"
-        disabled += mode == "disabled"
-    db.commit()
-    return {"message": f"批量处理完成：删除 {deleted} 个，安全禁用 {disabled} 个"}
+        result = deletion_service.queue_deletion(db, entity_type="account", entity_id=account.id, entity_label=f"{account.name}（{account.username}）", requester=operator)
+        queued += result["mode"] == "pending"
+    return {"message": f"已提交 {queued} 个账号的删除申请，等待管理员审核", "mode": "pending"}
 
 
 @app.get("/api/suppliers", response_model=list[SupplierOut])
@@ -599,34 +605,29 @@ def remove_supplier(supplier: Supplier, db: Session) -> str:
 @app.delete("/api/suppliers/{supplier_id}")
 def delete_supplier(
     supplier_id: int,
-    _: User = Depends(require_permission("supplier_management")),
+    user: User = Depends(require_permission("supplier_management")),
     db: Session = Depends(get_db),
 ):
     supplier = db.get(Supplier, supplier_id)
     if not supplier:
         raise HTTPException(status_code=404, detail="供应商不存在")
-    mode = remove_supplier(supplier, db)
-    db.commit()
-    message = "供应商已删除" if mode == "deleted" else "供应商已有历史分配或报价，已安全禁用并保留历史数据"
-    return {"message": message, "mode": mode}
+    return deletion_service.queue_deletion(db, entity_type="supplier", entity_id=supplier.id, entity_label=supplier.name, requester=user)
 
 
 @app.post("/api/suppliers/batch-delete")
 def batch_delete_suppliers(
     data: IdsRequest,
-    _: User = Depends(require_permission("supplier_management")),
+    user: User = Depends(require_permission("supplier_management")),
     db: Session = Depends(get_db),
 ):
-    deleted = disabled = 0
+    queued = 0
     for supplier_id in set(data.ids):
         supplier = db.get(Supplier, supplier_id)
         if not supplier:
             continue
-        mode = remove_supplier(supplier, db)
-        deleted += mode == "deleted"
-        disabled += mode == "disabled"
-    db.commit()
-    return {"message": f"批量处理完成：删除 {deleted} 个，安全禁用 {disabled} 个"}
+        result = deletion_service.queue_deletion(db, entity_type="supplier", entity_id=supplier.id, entity_label=supplier.name, requester=user)
+        queued += result["mode"] == "pending"
+    return {"message": f"已提交 {queued} 个供应商的删除申请，等待管理员审核", "mode": "pending"}
 
 
 @app.get("/api/categories", response_model=list[CategoryOut])
@@ -692,39 +693,50 @@ def remove_category(category: Category, db: Session) -> str:
 @app.delete("/api/categories/{category_id}")
 def delete_category(
     category_id: int,
-    _: User = Depends(require_permission("category_management")),
+    user: User = Depends(require_permission("category_management")),
     db: Session = Depends(get_db),
 ):
     category = db.get(Category, category_id)
     if not category:
         raise HTTPException(status_code=404, detail="分类不存在")
-    mode = remove_category(category, db)
-    db.commit()
-    return {"message": "分类已删除" if mode == "deleted" else "分类下已有商品，已禁用并保留关联数据", "mode": mode}
+    return deletion_service.queue_deletion(db, entity_type="category", entity_id=category.id, entity_label=category.name, requester=user)
 
 
 @app.post("/api/categories/batch-delete")
 def batch_delete_categories(
     data: IdsRequest,
-    _: User = Depends(require_permission("category_management")),
+    user: User = Depends(require_permission("category_management")),
     db: Session = Depends(get_db),
 ):
-    deleted = disabled = 0
+    queued = 0
     for category_id in set(data.ids):
         category = db.get(Category, category_id)
         if not category:
             continue
-        mode = remove_category(category, db)
-        deleted += mode == "deleted"
-        disabled += mode == "disabled"
-    db.commit()
-    return {"message": f"批量处理完成：删除 {deleted} 个，安全禁用 {disabled} 个"}
+        result = deletion_service.queue_deletion(db, entity_type="category", entity_id=category.id, entity_label=category.name, requester=user)
+        queued += result["mode"] == "pending"
+    return {"message": f"已提交 {queued} 个分类的删除申请，等待管理员审核", "mode": "pending"}
 
 
 def product_query():
     return select(Product).options(
-        selectinload(Product.units), selectinload(Product.assignments)
+        selectinload(Product.units), selectinload(Product.assignments), selectinload(Product.mini_customers)
     ).execution_options(populate_existing=True).order_by(Product.id.desc())
+
+
+def sync_mini_product_customers(product: Product, customer_ids: list[int], db: Session) -> None:
+    valid_ids = set(db.scalars(
+        select(Customer.id).where(Customer.id.in_(set(customer_ids)), Customer.active.is_(True))
+    ).all()) if customer_ids else set()
+    requested_ids = set(customer_ids)
+    if valid_ids != requested_ids:
+        raise HTTPException(status_code=400, detail="小程序商品分配中包含无效客户")
+    current = {row.customer_id: row for row in product.mini_customers}
+    for customer_id, row in current.items():
+        if customer_id not in valid_ids:
+            db.delete(row)
+    for customer_id in valid_ids - set(current):
+        product.mini_customers.append(MiniProductCustomer(customer_id=customer_id))
 
 
 def normalize_product_metadata(data: ProductCreate | ProductUpdate, db: Session, product_id: int | None = None):
@@ -848,7 +860,7 @@ def create_product(
     if sum(1 for unit in data.units if unit.is_base) != 1:
         raise HTTPException(status_code=400, detail="必须且只能设置一个基础单位")
     aliases, customer_aliases = normalize_product_metadata(data, db)
-    values = data.model_dump(exclude={"units", "supplier_ids", "aliases", "customer_aliases"})
+    values = data.model_dump(exclude={"units", "supplier_ids", "aliases", "customer_aliases", "mini_customer_ids"})
     category = db.get(Category, data.category_id)
     if not category or not category.active:
         raise HTTPException(status_code=400, detail="请选择有效商品分类")
@@ -861,6 +873,7 @@ def create_product(
     product.units = [ProductUnit(**unit.model_dump()) for unit in data.units]
     db.add(product)
     db.flush()
+    sync_mini_product_customers(product, [] if data.mini_all_customers else data.mini_customer_ids, db)
     sync_product_suppliers(product, data.supplier_ids, user.id, db)
     wecom_service.rematch_pending_items_for_product(db, product)
     db.commit()
@@ -891,7 +904,7 @@ def update_product(
     if not category or not category.active:
         raise HTTPException(status_code=400, detail="请选择有效商品分类")
     aliases, customer_aliases = normalize_product_metadata(data, db, product_id)
-    values = data.model_dump(exclude={"supplier_ids", "aliases", "customer_aliases"})
+    values = data.model_dump(exclude={"supplier_ids", "aliases", "customer_aliases", "mini_customer_ids"})
     values["name"] = data.name.strip()
     values["sku"] = data.sku.strip() if data.sku else None
     values["category"] = category.name
@@ -899,6 +912,7 @@ def update_product(
     values["customer_aliases_json"] = json.dumps(customer_aliases, ensure_ascii=False)
     for key, value in values.items():
         setattr(product, key, value)
+    sync_mini_product_customers(product, [] if data.mini_all_customers else data.mini_customer_ids, db)
     wecom_service.rematch_pending_items_for_product(db, product)
     if not data.active:
         for assignment in product.assignments:
@@ -1023,34 +1037,29 @@ def remove_product(product: Product, db: Session) -> str:
 @app.delete("/api/products/{product_id}")
 def delete_product(
     product_id: int,
-    _: User = Depends(require_permission("product_management")),
+    user: User = Depends(require_permission("product_management")),
     db: Session = Depends(get_db),
 ):
     product = db.get(Product, product_id)
     if not product:
         raise HTTPException(status_code=404, detail="商品不存在")
-    mode = remove_product(product, db)
-    db.commit()
-    message = "商品已删除" if mode == "deleted" else "商品已有历史分配或报价，已安全禁用并保留历史数据"
-    return {"message": message, "mode": mode}
+    return deletion_service.queue_deletion(db, entity_type="product", entity_id=product.id, entity_label=product.name, requester=user)
 
 
 @app.post("/api/products/batch-delete")
 def batch_delete_products(
     data: IdsRequest,
-    _: User = Depends(require_permission("product_management")),
+    user: User = Depends(require_permission("product_management")),
     db: Session = Depends(get_db),
 ):
-    deleted = disabled = 0
+    queued = 0
     for product_id in set(data.ids):
         product = db.get(Product, product_id)
         if not product:
             continue
-        mode = remove_product(product, db)
-        deleted += mode == "deleted"
-        disabled += mode == "disabled"
-    db.commit()
-    return {"message": f"批量处理完成：删除 {deleted} 个，安全禁用 {disabled} 个"}
+        result = deletion_service.queue_deletion(db, entity_type="product", entity_id=product.id, entity_label=product.name, requester=user)
+        queued += result["mode"] == "pending"
+    return {"message": f"已提交 {queued} 个商品的删除申请，等待管理员审核", "mode": "pending"}
 
 
 @app.post("/api/products/{product_id}/units", response_model=UnitOut)
@@ -1721,7 +1730,7 @@ def update_order(
 @app.delete("/api/orders/{order_id}")
 def delete_order(
     order_id: int,
-    _: User = Depends(require_permission("order_management")),
+    user: User = Depends(require_permission("order_management")),
     db: Session = Depends(get_db),
 ):
     order = db.get(PurchaseOrder, order_id)
@@ -1729,31 +1738,7 @@ def delete_order(
         raise HTTPException(status_code=404, detail="采购订单不存在")
     if order.status != "draft":
         raise HTTPException(status_code=400, detail="已确认采购单属于业务凭证，不可直接删除；可以编辑更正内容")
-    product_ids = {item.product_id for item in order.items}
-    links = db.scalars(
-        select(SalesProcurementLink).where(SalesProcurementLink.purchase_order_id == order_id)
-    ).all()
-    affected_sales_orders = []
-    for link in links:
-        sales_order = db.scalar(sales_order_query().where(SalesOrder.id == link.sales_order_id))
-        if sales_order:
-            for item in sales_order.items:
-                if item.product_id in product_ids:
-                    item.cost_unit_price = None
-            affected_sales_orders.append(sales_order)
-        db.delete(link)
-    db.flush()
-    for sales_order in affected_sales_orders:
-        remaining = db.scalar(
-            select(func.count())
-            .select_from(SalesProcurementLink)
-            .where(SalesProcurementLink.sales_order_id == sales_order.id)
-        ) or 0
-        if not remaining:
-            sales_order.procurement_generated_at = None
-    db.delete(order)
-    db.commit()
-    return {"message": "采购单已删除；关联销售单可以重新分配供应商"}
+    return deletion_service.queue_deletion(db, entity_type="purchase_order", entity_id=order.id, entity_label=order.order_no, requester=user)
 
 
 @app.post("/api/orders/{order_id}/confirm")
@@ -2100,25 +2085,13 @@ def confirm_sales_order(
 @app.delete("/api/sales/orders/{order_id}")
 def delete_sales_order(
     order_id: int,
-    _: User = Depends(require_permission("sales_order_management")),
+    user: User = Depends(require_permission("sales_order_management")),
     db: Session = Depends(get_db),
 ):
     order = db.get(SalesOrder, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="销售单不存在")
-    if order.procurement_links:
-        raise HTTPException(status_code=400, detail="该销售单已生成采购单，请先删除对应采购草稿")
-    if db.scalar(select(PickingTask.id).where(PickingTask.sales_order_id == order_id)):
-        raise HTTPException(status_code=400, detail="该销售单已有分拣任务，不可删除")
-    if db.scalar(select(Complaint.id).where(Complaint.sales_order_id == order_id)):
-        raise HTTPException(status_code=400, detail="该销售单已关联投诉记录，不可删除")
-    if db.scalar(select(WeComOrderDraft.id).where(WeComOrderDraft.sales_order_id == order_id)):
-        raise HTTPException(status_code=400, detail="该销售单由企业微信订单草稿生成，不可直接删除")
-    if order.acceptance_status != "pending" or order.accepted_at or Decimal(order.invoice_amount or 0) != 0:
-        raise HTTPException(status_code=400, detail="该销售单已有验收或开票数据，不可删除")
-    db.delete(order)
-    db.commit()
-    return {"message": "销售单已删除"}
+    return deletion_service.queue_deletion(db, entity_type="sales_order", entity_id=order.id, entity_label=order.order_no, requester=user)
 
 
 def best_supplier_quote(product_id: int, db: Session):
@@ -2722,15 +2695,10 @@ def update_staff(staff_id: int, data: StaffCreate, _: User = Depends(require_per
 
 
 @app.delete("/api/staff/{staff_id}")
-def delete_staff(staff_id: int, _: User = Depends(require_permission("staff_management")), db: Session = Depends(get_db)):
+def delete_staff(staff_id: int, user: User = Depends(require_permission("staff_management")), db: Session = Depends(get_db)):
     staff = db.get(LogisticsStaff, staff_id)
     if not staff: raise HTTPException(status_code=404, detail="人员不存在")
-    assigned = db.scalar(select(Customer.id).where((Customer.sorter_id == staff_id) | (Customer.delivery_id == staff_id)).limit(1))
-    if assigned:
-        staff.active = False; mode = "disabled"; message = "人员已分配客户，已安全禁用"
-    else:
-        db.delete(staff); mode = "deleted"; message = "人员已删除"
-    db.commit(); return {"message": message, "mode": mode}
+    return deletion_service.queue_deletion(db, entity_type="staff", entity_id=staff.id, entity_label=f"{staff.name}（{staff.staff_type}）", requester=user)
 
 
 @app.post("/api/staff/{staff_id}/reset-mobile-token")
@@ -2895,15 +2863,10 @@ def update_customer(customer_id: int, data: CustomerCreate, _: User = Depends(re
 
 
 @app.delete("/api/customers/{customer_id}")
-def delete_customer(customer_id: int, _: User = Depends(require_permission("customer_management")), db: Session = Depends(get_db)):
+def delete_customer(customer_id: int, user: User = Depends(require_permission("customer_management")), db: Session = Depends(get_db)):
     customer = db.get(Customer, customer_id)
     if not customer: raise HTTPException(status_code=404, detail="客户不存在")
-    has_sales = db.scalar(select(SalesOrder.id).where(SalesOrder.customer_id == customer_id).limit(1))
-    if has_sales:
-        customer.active = False
-        db.commit()
-        return {"message": "客户已有销售历史，已安全禁用并保留单据", "mode": "disabled"}
-    db.delete(customer); db.commit(); return {"message": "客户已删除", "mode": "deleted"}
+    return deletion_service.queue_deletion(db, entity_type="customer", entity_id=customer.id, entity_label=f"{customer.name}（{customer.customer_code or '无编号'}）", requester=user)
 
 
 @app.get("/api/dashboard")

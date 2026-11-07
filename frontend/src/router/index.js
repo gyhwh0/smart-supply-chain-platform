@@ -12,6 +12,7 @@ const routes = [
       { path: '', redirect: '/dashboard' },
       { path: 'dashboard', component: () => import('@/views/Dashboard.vue'), meta: { permission: 'dashboard' } },
       { path: 'accounts', component: () => import('@/views/Accounts.vue'), meta: { permission: 'account_management' } },
+      { path: 'deletion-approvals', component: () => import('@/views/DeletionApprovals.vue'), meta: { permission: 'deletion_approval' } },
       { path: 'super-admin', component: () => import('@/views/SuperAdmin.vue'), meta: { superAdmin: true } },
       { path: 'suppliers', component: () => import('@/views/Suppliers.vue'), meta: { permission: 'supplier_management' } },
       { path: 'categories', component: () => import('@/views/Categories.vue'), meta: { permission: 'category_management' } },
@@ -78,6 +79,7 @@ router.beforeEach(async (to) => {
       ['picking_management', '/picking'],
       ['picking_monitor', '/picking-monitor'],
       ['finance_management', '/finance'],
+      ['deletion_approval', '/deletion-approvals'],
     ]
     return candidates.find(([permission]) => user?.permissions?.includes(permission))?.[1] || '/login'
   }

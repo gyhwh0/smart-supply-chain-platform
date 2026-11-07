@@ -92,6 +92,9 @@
         <el-menu-item v-if="can('account_management')" index="/accounts"
           ><el-icon><UserFilled /></el-icon><span>账号管理</span></el-menu-item
         >
+        <el-menu-item v-if="can('deletion_approval') && user?.role === 'admin'" index="/deletion-approvals">
+          <el-icon><CircleCheck /></el-icon><span>删除审核</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>

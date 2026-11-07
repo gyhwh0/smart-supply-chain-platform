@@ -76,6 +76,7 @@ const permissionOptions = [
   { value: 'picking_management', label: '扫码分拣', description: '生成分拣任务、扫码确认和查看进度' },
   { value: 'picking_monitor', label: '分拣配送监控', description: '查看人员工作量、客户耗时和单品操作时间' },
   { value: 'finance_management', label: '财务管理', description: '查看销售、验收、开票和毛利数据' },
+  { value: 'deletion_approval', label: '删除审核', description: '仅管理员可批准或驳回删除申请' },
 ]
 const roleDefaults = {
   admin: permissionOptions.filter(item => item.value !== 'finance_management').map(item => item.value),
@@ -109,8 +110,8 @@ const save = async () => {
   await load()
 }
 const toggle = async row => { await updateAccount(row.id, { ...row, password: null, active: !row.active }); ElMessage.success(row.active ? '账号已禁用' : '账号已启用'); await load() }
-const remove = async row => { await ElMessageBox.confirm(`确认删除账号“${row.username}”吗？有业务历史时将安全禁用。`, '删除账号', { type: 'warning' }); const result = await deleteAccount(row.id); ElMessage.success(result.message); await load() }
-const batchRemove = async () => { await ElMessageBox.confirm(`确认批量处理选中的 ${selected.value.length} 个账号吗？`, '批量删除', { type: 'warning' }); const result = await batchDeleteAccounts(selected.value.map(item => item.id)); ElMessage.success(result.message); await load() }
+const remove = async row => { await ElMessageBox.confirm(`确认提交账号“${row.username}”的删除申请吗？管理员审核前不会删除。`, '提交删除申请', { type: 'warning' }); const result = await deleteAccount(row.id); ElMessage.success(result.message); await load() }
+const batchRemove = async () => { await ElMessageBox.confirm(`确认提交选中的 ${selected.value.length} 个账号的删除申请吗？`, '批量提交删除申请', { type: 'warning' }); const result = await batchDeleteAccounts(selected.value.map(item => item.id)); ElMessage.success(result.message); await load() }
 onMounted(load)
 </script>
 

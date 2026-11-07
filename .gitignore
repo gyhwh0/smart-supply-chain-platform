@@ -21,6 +21,7 @@ venv/
 node_modules/
 dist/
 coverage/
+mini-program/project.private.config.json
 
 *.db
 *.sqlite

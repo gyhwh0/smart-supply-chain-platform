@@ -73,6 +73,7 @@ class Product(Base):
     image_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
     image_content_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     mini_visible: Mapped[bool] = mapped_column(Boolean, default=True)
+    mini_all_customers: Mapped[bool] = mapped_column(Boolean, default=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     units: Mapped[list["ProductUnit"]] = relationship(
@@ -80,6 +81,9 @@ class Product(Base):
     )
     assignments: Mapped[list["ProductSupplier"]] = relationship(back_populates="product")
     category_rel: Mapped[Category | None] = relationship(back_populates="products")
+    mini_customers: Mapped[list["MiniProductCustomer"]] = relationship(
+        back_populates="product", cascade="all, delete-orphan"
+    )
 
     @property
     def supplier_ids(self) -> list[int]:
@@ -108,6 +112,10 @@ class Product(Base):
     @property
     def image_url(self) -> str | None:
         return f"/api/mini/products/{self.id}/image" if self.image_path else None
+
+    @property
+    def mini_customer_ids(self) -> list[int]:
+        return [row.customer_id for row in self.mini_customers]
 
 
 class ProductUnit(Base):
@@ -658,3 +666,31 @@ class MiniProgramOrder(Base):
 
     user: Mapped[MiniProgramUser] = relationship(back_populates="orders")
     sales_order: Mapped[SalesOrder] = relationship()
+
+
+class MiniProductCustomer(Base):
+    __tablename__ = "mini_product_customers"
+    __table_args__ = (UniqueConstraint("product_id", "customer_id", name="uq_mini_product_customer"),)
+
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"))
+
+    product: Mapped[Product] = relationship(back_populates="mini_customers")
+    customer: Mapped[Customer] = relationship()
+
+
+class DeletionRequest(Base):
+    __tablename__ = "deletion_requests"
+
+    entity_type: Mapped[str] = mapped_column(String(40), index=True)
+    entity_id: Mapped[int] = mapped_column(Integer)
+    entity_label: Mapped[str] = mapped_column(String(200))
+    requested_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    review_note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    execution_result: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    requester: Mapped[User] = relationship(foreign_keys=[requested_by])
+    reviewer: Mapped[User | None] = relationship(foreign_keys=[reviewed_by])

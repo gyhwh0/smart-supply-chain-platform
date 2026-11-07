@@ -240,7 +240,7 @@ const save = async () => {
   window.dispatchEvent(new CustomEvent("business-data-updated", { detail: { module: "complaints", action: creating.value ? "create" : "update" } }));
 };
 const remove = async row => {
-  await ElMessageBox.confirm(`确认删除投诉 ${row.complaint_no}？删除后无法恢复。`, "删除投诉", { type: "warning" });
+  await ElMessageBox.confirm(`确认提交投诉 ${row.complaint_no} 的删除申请吗？管理员审核前不会删除。`, "提交删除申请", { type: "warning" });
   const result = await deleteComplaint(row.id);
   ElMessage.success(result.message);
   await load();

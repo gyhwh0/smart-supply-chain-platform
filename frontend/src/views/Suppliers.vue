@@ -69,13 +69,13 @@ const toggle = async (row) => {
   await load()
 }
 const remove = async (row) => {
-  await ElMessageBox.confirm(`确认删除“${row.name}”吗？若已有分配或报价，将改为安全禁用并保留历史数据。`, '删除供应商', { type: 'warning' })
+  await ElMessageBox.confirm(`确认提交供应商“${row.name}”的删除申请吗？管理员审核前不会删除。`, '提交删除申请', { type: 'warning' })
   const result = await deleteSupplier(row.id)
   ElMessage.success(result.message)
   await load()
 }
 const batchRemove = async () => {
-  await ElMessageBox.confirm(`确认批量处理选中的 ${selected.value.length} 家供应商吗？有历史数据时将安全禁用。`, '批量删除', { type: 'warning' })
+  await ElMessageBox.confirm(`确认提交选中的 ${selected.value.length} 家供应商的删除申请吗？`, '批量提交删除申请', { type: 'warning' })
   const result = await batchDeleteSuppliers(selected.value.map(item => item.id))
   ElMessage.success(result.message)
   await load()
