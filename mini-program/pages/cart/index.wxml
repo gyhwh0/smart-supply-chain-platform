@@ -1,7 +1,7 @@
 <view class="page">
   <view wx:if="{{!cart.length}}" class="empty">购物车还是空的，先去选择商品吧<button class="primary go" bindtap="goProducts">去选商品</button></view>
   <block wx:else>
-    <view class="card" wx:for="{{cart}}" wx:key="product_id"><view class="row"><view><view class="name">{{item.name}}</view><view class="muted">{{item.unit_name}} · <text class="price">¥{{item.price}}</text></view></view><view class="counter"><text data-index="{{index}}" bindtap="minus">−</text><text>{{item.quantity}}</text><text data-index="{{index}}" bindtap="plus">＋</text></view></view><text class="remove" data-index="{{index}}" bindtap="remove">删除</text></view>
+    <view class="card" wx:for="{{cart}}" wx:key="cart_key"><view class="row"><view><view class="name">{{item.name}}</view><view class="muted">{{item.unit_name}} · <text class="price">¥{{item.price}}</text></view></view><view class="counter"><text data-index="{{index}}" bindtap="minus">−</text><text>{{item.quantity}}</text><text data-index="{{index}}" bindtap="plus">＋</text></view></view><input class="item-remark" data-index="{{index}}" value="{{item.remark}}" bindinput="itemRemarkChange" placeholder="商品备注：如要大个、去皮、分袋（选填）"/><text class="remove" data-index="{{index}}" bindtap="remove">删除</text></view>
     <view class="card"><view class="field"><text>配送日期</text><picker mode="date" value="{{deliveryDate}}" start="{{today}}" bindchange="dateChange"><view>{{deliveryDate}}</view></picker></view><textarea placeholder="订单备注，如切配规格、送达要求（选填）" value="{{notes}}" bindinput="notesChange"/></view>
     <view class="total"><text>合计</text><text class="price">¥{{total}}</text></view><button class="primary submit" loading="{{submitting}}" disabled="{{submitting}}" bindtap="submit">提交订单</button>
   </block>

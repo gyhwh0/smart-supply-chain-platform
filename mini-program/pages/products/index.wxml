@@ -2,11 +2,22 @@
   <view class="search"><input value="{{keyword}}" placeholder="搜索商品、别名或 SKU" bindinput="onKeyword"/><text bindtap="search">搜索</text></view>
   <scroll-view scroll-x class="categories"><text class="{{category===''?'active':''}}" data-value="" bindtap="chooseCategory">全部</text><text wx:for="{{categories}}" wx:key="*this" class="{{category===item?'active':''}}" data-value="{{item}}" bindtap="chooseCategory">{{item}}</text></scroll-view>
   <view wx:if="{{!loading && !products.length}}" class="empty">暂无可订购商品</view>
-  <view wx:for="{{products}}" wx:key="id" class="product card">
+  <view wx:for="{{products}}" wx:key="id" class="product card" data-index="{{index}}" bindtap="openSpec">
     <image wx:if="{{item.image_url}}" src="{{apiBase + item.image_url}}" mode="aspectFill"/><view wx:else class="no-image">暂无图片</view>
     <view class="content"><view class="name">{{item.name}}</view><view class="muted category">{{item.category}} · {{item.sku || '无 SKU'}}</view><view class="desc">{{item.description || item.storage_notes || '新鲜食材，价格以当前页面为准'}}</view>
-      <picker range="{{item.units}}" range-key="label" data-index="{{index}}" bindchange="chooseUnit"><view class="unit">{{item.units[item.unitIndex].label}}</view></picker>
-      <view class="bottom"><text class="price">¥{{item.units[item.unitIndex].priceText}}</text><button size="mini" class="primary" data-index="{{index}}" bindtap="addCart" disabled="{{!item.units[item.unitIndex].available}}">加入购物车</button></view>
+      <view class="unit">{{item.units.length}} 种规格可选</view>
+      <view class="bottom"><text class="price">{{item.priceText}}</text><button size="mini" class="primary" data-index="{{index}}" catchtap="openSpec">选择规格</button></view>
+    </view>
+  </view>
+  <view wx:if="{{specVisible}}" class="mask" bindtap="closeSpec">
+    <view class="spec-sheet" catchtap="stop">
+      <view class="sheet-head"><view><view class="sheet-name">{{selectedProduct.name}}</view><view class="muted">请选择规格、数量并填写商品要求</view></view><text bindtap="closeSpec">×</text></view>
+      <view class="section-title">规格与销售价</view>
+      <view class="spec-list"><view wx:for="{{selectedProduct.units}}" wx:key="id" class="spec-item {{specUnitIndex===index?'selected':''}} {{!item.available?'disabled':''}}" data-index="{{index}}" bindtap="selectSpec"><text>{{item.name}}</text><b>{{item.available?'¥'+item.priceText:'待定价'}}</b></view></view>
+      <view class="quantity-row"><text>购买数量</text><view class="quantity"><text bindtap="minusQuantity">−</text><input type="digit" value="{{specQuantity}}" bindinput="quantityInput"/><text bindtap="plusQuantity">＋</text></view><text class="unit-name">{{selectedProduct.units[specUnitIndex].name}}</text></view>
+      <view class="section-title">商品备注（选填）</view>
+      <textarea maxlength="255" value="{{specRemark}}" bindinput="remarkInput" placeholder="如：要大个、去皮、不要太熟、分袋包装"/>
+      <view class="sheet-total"><view><small>小计</small><b>¥{{specSubtotal}}</b></view><button class="primary" bindtap="addCart" disabled="{{!selectedProduct.units[specUnitIndex].available}}">加入购物车</button></view>
     </view>
   </view>
 </view>

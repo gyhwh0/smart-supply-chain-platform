@@ -51,6 +51,7 @@ def add_or_merge_item(
     quantity: Decimal,
     unit_price: Decimal,
     remark: str | None,
+    is_addition: bool = False,
 ) -> tuple[SalesOrderItem, bool]:
     """Add a new product line or increase its existing line using unit conversion."""
     existing = next((row for row in order.items if row.product_id == product.id), None)
@@ -63,6 +64,9 @@ def add_or_merge_item(
             quantity=quantity,
             unit_price=unit_price,
             remark=(remark or "").strip() or None,
+            addition_count=1 if is_addition else 0,
+            addition_quantity=quantity if is_addition else Decimal("0"),
+            last_addition_at=datetime.now() if is_addition else None,
         )
         order.items.append(item)
         return item, True
@@ -78,5 +82,10 @@ def add_or_merge_item(
     if specification and specification.strip() and specification.strip() != (existing.specification or ""):
         existing.specification = "；".join(filter(None, [existing.specification, specification.strip()]))[:120]
     if remark and remark.strip() and remark.strip() != (existing.remark or ""):
-        existing.remark = "；".join(filter(None, [existing.remark, f"加单：{remark.strip()}"]))[:255]
+        incoming_remark = f"加单：{remark.strip()}" if is_addition else remark.strip()
+        existing.remark = "；".join(filter(None, [existing.remark, incoming_remark]))[:255]
+    if is_addition:
+        existing.addition_count = (existing.addition_count or 0) + 1
+        existing.addition_quantity = Decimal(existing.addition_quantity or 0) + converted_quantity
+        existing.last_addition_at = datetime.now()
     return existing, False

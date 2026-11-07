@@ -24,7 +24,7 @@
           <template #default="scope">
             <div class="detail-box">
               <el-table :data="scope.row.items" size="small">
-                <el-table-column prop="product_name" label="商品" min-width="150" />
+                <el-table-column label="商品" min-width="190"><template #default="cell"><span>{{cell.row.product_name}}</span><el-tag v-if="cell.row.is_addition" type="warning" size="small" class="addition-tag">加单 +{{cell.row.addition_quantity}} {{cell.row.unit_name}}</el-tag></template></el-table-column>
                 <el-table-column prop="category" label="分类" width="110" />
                 <el-table-column prop="specification" label="规格" min-width="110"><template #default="cell">{{ cell.row.specification || '—' }}</template></el-table-column>
                 <el-table-column label="数量" width="120"><template #default="cell">{{ cell.row.quantity }} {{ cell.row.unit_name }}</template></el-table-column>
@@ -42,7 +42,7 @@
         <el-table-column prop="customer_name" label="客户" min-width="140" />
         <el-table-column prop="order_date" label="单据日期" width="115" />
         <el-table-column prop="delivery_date" label="要求交期" width="115"><template #default="scope">{{ scope.row.delivery_date || '未指定' }}</template></el-table-column>
-        <el-table-column label="商品" width="90"><template #default="scope">{{ scope.row.items.length }} 项</template></el-table-column>
+        <el-table-column label="商品" width="130"><template #default="scope"><span>{{ scope.row.items.length }} 项</span><el-tag v-if="scope.row.has_additions" type="warning" size="small" class="addition-tag">含 {{scope.row.addition_item_count}} 项加单</el-tag></template></el-table-column>
         <el-table-column label="销售金额" width="130"><template #default="scope"><b class="amount">¥{{ money(scope.row.total_amount) }}</b></template></el-table-column>
         <el-table-column label="状态" width="110"><template #default="scope"><el-tag :type="scope.row.status === 'confirmed' ? 'success' : 'warning'">{{ scope.row.status === 'confirmed' ? '已确认' : '待确认' }}</el-tag></template></el-table-column>
         <el-table-column label="采购进度" width="120"><template #default="scope"><el-tag v-if="scope.row.purchases.length" type="success" effect="plain">{{ scope.row.purchases.length }} 张采购单</el-tag><span v-else class="muted">未生成</span></template></el-table-column>
@@ -288,6 +288,7 @@ onMounted(async () => {
 .metric-grid small,.metric-grid strong { display:block; }.metric-grid small { color:#7c8799; }.metric-grid strong { font-size:25px; margin-top:8px; color:#1c2c44; }
 .toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px; }.amount { color:#e06535; }.muted { color:#a0a8b5; }
 .detail-box { padding:12px 46px 18px; background:#f7f9fc; }.purchase-links { margin-top:12px; display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.addition-tag { margin-left:7px; }
 .order-form { margin-top:18px; }.line-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:8px 0 10px; }.line-heading small { display:block; color:#8490a3; margin-top:4px; }.quick-actions { display:flex; gap:8px; align-items:center; }.entry-table { width:100%; }.entry-table :deep(.quick-empty-row td) { background:#f3f8ff; }
 .option-note { float:right; color:#9099a8; margin-left:24px; }.option-note em { color:#2a9d6f; font-style:normal; }.form-bottom { display:grid; grid-template-columns:1fr auto; align-items:end; gap:24px; margin-top:16px; }.grand-total { min-width:260px; text-align:right; }.grand-total span,.grand-total b { display:block; }.grand-total span { color:#7c8799; }.grand-total b { color:#df6131; font-size:24px; margin-top:5px; }
 .allocation-head { display:flex; justify-content:space-between; align-items:center; gap:18px; margin:18px 0 12px; }.allocation-head b,.allocation-head span { display:block; }.allocation-head span { color:#7c8799; margin-top:4px; }.allocation-tools { display:flex; align-items:center; gap:8px; }.allocation-summary { display:flex; justify-content:flex-end; gap:24px; align-items:center; padding:16px 4px 0; color:#68758a; }.allocation-summary b { color:#287cba; font-size:17px; }

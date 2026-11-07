@@ -293,17 +293,18 @@ def submit_mini_order(
         }
     if data.delivery_date and data.delivery_date < date.today():
         raise HTTPException(status_code=400, detail="配送日期不能早于今天")
-    product_ids = [row.product_id for row in data.items]
-    if len(product_ids) != len(set(product_ids)):
-        raise HTTPException(status_code=400, detail="购物车中请合并相同商品")
     resolved = []
     for incoming in data.items:
         product = db.scalar(
-            select(Product).options(selectinload(Product.units)).where(Product.id == incoming.product_id)
+            select(Product)
+            .options(selectinload(Product.units), selectinload(Product.mini_customers))
+            .where(Product.id == incoming.product_id)
         )
         unit = db.get(ProductUnit, incoming.unit_id)
         if not product or not product.active or not product.mini_visible or not unit or unit.product_id != product.id:
             raise HTTPException(status_code=400, detail="订单包含已下架商品或无效单位，请刷新商品列表")
+        if not product.mini_all_customers and customer.id not in product.mini_customer_ids:
+            raise HTTPException(status_code=400, detail=f"{product.name}未分配给当前客户，请刷新商品列表")
         price = _sales_price(product, unit)
         if price is None:
             raise HTTPException(status_code=400, detail=f"{product.name}（{unit.name}）尚未设置销售价")
@@ -331,6 +332,7 @@ def submit_mini_order(
         db.add(order)
         db.flush()
     summary = []
+    supplement_amount = Decimal("0")
     for incoming, product, unit, price in resolved:
         sales_order_service.add_or_merge_item(
             db,
@@ -342,9 +344,12 @@ def submit_mini_order(
             quantity=incoming.quantity,
             unit_price=price,
             remark=incoming.remark,
+            is_addition=merged,
         )
         summary.append(f"{_customer_product_name(product, customer.id)} {incoming.quantity:g}{unit.name}")
+        supplement_amount += incoming.quantity * price
     if merged:
+        order.supplement_amount = Decimal(order.supplement_amount or 0) + supplement_amount
         note = "、".join(summary)
         if data.notes:
             note += f"；{data.notes.strip()}"
@@ -386,6 +391,9 @@ def mini_orders(user: MiniProgramUser = Depends(_current_mini_user), db: Session
             "quantity": float(row.quantity),
             "unit_price": float(row.unit_price),
             "amount": round(float(row.quantity * row.unit_price), 2),
+            "remark": row.remark,
+            "is_addition": bool(row.addition_count),
+            "addition_quantity": float(row.addition_quantity or 0),
         } for row in order.items]
         output.append({
             "id": order.id,
@@ -394,6 +402,7 @@ def mini_orders(user: MiniProgramUser = Depends(_current_mini_user), db: Session
             "delivery_date": order.delivery_date,
             "status": order.status,
             "items": items,
+            "has_additions": any(row["is_addition"] for row in items),
             "total_amount": round(sum(row["amount"] for row in items), 2),
             "created_at": order.created_at,
         })

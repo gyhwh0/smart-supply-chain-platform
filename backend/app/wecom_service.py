@@ -514,6 +514,7 @@ def _confirm_draft(db: Session, draft: WeComOrderDraft) -> tuple[SalesOrder, boo
             quantity=item.quantity,
             unit_price=item.unit_price,
             remark=item.remark,
+            is_addition=merged,
         )
         supplement_amount += item.quantity * item.unit_price
     if merged:

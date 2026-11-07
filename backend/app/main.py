@@ -139,6 +139,9 @@ def startup():
         },
         "sales_order_items": {
             "display_name": "VARCHAR(120) NULL",
+            "addition_count": "INTEGER NOT NULL DEFAULT 0",
+            "addition_quantity": "DECIMAL(12,4) NOT NULL DEFAULT 0",
+            "last_addition_at": "DATETIME NULL",
             "delivered_quantity": "DECIMAL(12,4) NULL",
             "accepted_quantity": "DECIMAL(12,4) NULL",
             "acceptance_variance_reason": "VARCHAR(255) NULL",
@@ -1836,6 +1839,10 @@ def sales_order_output(order: SalesOrder):
             "unit_price": float(item.unit_price),
             "amount": round(float(item.quantity * item.unit_price), 2),
             "remark": item.remark,
+            "is_addition": bool(item.addition_count),
+            "addition_count": item.addition_count or 0,
+            "addition_quantity": float(item.addition_quantity or 0),
+            "last_addition_at": item.last_addition_at,
         }
         for item in order.items
     ]
@@ -1850,6 +1857,7 @@ def sales_order_output(order: SalesOrder):
         }
         for link in order.procurement_links
     ]
+    addition_items = [item for item in items if item["is_addition"]]
     return {
         "id": order.id,
         "order_no": order.order_no,
@@ -1865,6 +1873,12 @@ def sales_order_output(order: SalesOrder):
         "procurement_generated_at": order.procurement_generated_at,
         "created_at": order.created_at,
         "items": items,
+        "has_additions": bool(addition_items),
+        "addition_item_count": len(addition_items),
+        "latest_addition_at": max(
+            (item["last_addition_at"] for item in addition_items if item["last_addition_at"]),
+            default=None,
+        ),
         "purchases": purchases,
         "total_amount": round(sum(item["amount"] for item in items), 2),
     }
@@ -1874,6 +1888,10 @@ def replace_sales_order_items(order: SalesOrder, items, db: Session):
     product_ids = [incoming.product_id for incoming in items]
     if len(product_ids) != len(set(product_ids)):
         raise HTTPException(status_code=400, detail="同一销售单中请合并相同商品")
+    addition_metadata = {
+        item.product_id: (item.addition_count, item.addition_quantity, item.last_addition_at)
+        for item in order.items
+    }
     order.items.clear()
     db.flush()
     for incoming in items:
@@ -1881,6 +1899,9 @@ def replace_sales_order_items(order: SalesOrder, items, db: Session):
         unit = db.get(ProductUnit, incoming.unit_id)
         if not product or not product.active or not unit or unit.product_id != product.id:
             raise HTTPException(status_code=400, detail="销售单中包含无效商品或单位")
+        addition_count, addition_quantity, last_addition_at = addition_metadata.get(
+            product.id, (0, Decimal("0"), None)
+        )
         order.items.append(
             SalesOrderItem(
                 product_id=product.id,
@@ -1890,6 +1911,9 @@ def replace_sales_order_items(order: SalesOrder, items, db: Session):
                 quantity=incoming.quantity,
                 unit_price=incoming.unit_price,
                 remark=(incoming.remark or "").strip() or None,
+                addition_count=addition_count or 0,
+                addition_quantity=addition_quantity or Decimal("0"),
+                last_addition_at=last_addition_at,
             )
         )
 
@@ -2007,6 +2031,7 @@ def create_sales_order(
                 quantity=incoming.quantity,
                 unit_price=incoming.unit_price,
                 remark=incoming.remark,
+                is_addition=True,
             )
             summary.append(f"{customer_product_name(product, order.customer_id)} {incoming.quantity:g}{unit.name}")
             supplement_amount += incoming.quantity * incoming.unit_price
