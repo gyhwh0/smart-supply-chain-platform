@@ -2,7 +2,7 @@
   "description": "嘉采商家订货小程序",
   "miniprogramRoot": "./",
   "projectname": "jiacai-order",
-  "appid": "touristappid",
+  "appid": "wxa51beb5ca3928433",
   "setting": {
     "urlCheck": false,
     "es6": true,
