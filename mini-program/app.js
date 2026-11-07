@@ -4,7 +4,8 @@ App({
   globalData: { apiBase, token: '', profile: null },
   onLaunch() { this.login() },
   login() {
-    return new Promise((resolve, reject) => {
+    if (this._loginPromise) return this._loginPromise
+    this._loginPromise = new Promise((resolve, reject) => {
       wx.login({
         success: ({ code }) => {
           if (!code) return reject(new Error('未取得微信登录凭证'))
@@ -22,5 +23,10 @@ App({
         }, fail: reject
       })
     })
+    this._loginPromise.then(
+      () => { this._loginPromise = null },
+      () => { this._loginPromise = null }
+    )
+    return this._loginPromise
   }
 })

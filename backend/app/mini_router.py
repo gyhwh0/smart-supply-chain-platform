@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app import picking_service, sales_order_service
@@ -161,7 +162,16 @@ def mini_login(data: LoginIn, db: Session = Depends(get_db)):
         user.unionid = result.get("unionid") or user.unionid
         user.nickname = data.nickname or user.nickname
     user.last_login_at = datetime.now()
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # onLaunch 与首屏请求可能同时换取同一个 openid；并发首次登录时复用已写入的账号。
+        db.rollback()
+        user = db.scalar(select(MiniProgramUser).where(MiniProgramUser.openid == openid))
+        if not user:
+            raise HTTPException(status_code=500, detail="创建小程序账号失败，请重试")
+        user.last_login_at = datetime.now()
+        db.commit()
     return {"token": _token(user.id), **_profile(user, db)}
 
 
