@@ -51,7 +51,7 @@ const currentDifference=row=>row.actual_quantity==null?row.difference_quantity:N
 const differenceClass=row=>currentDifference(row)>0?'gain':currentDifference(row)<0?'danger':''
 const number=v=>Number(v||0).toLocaleString('zh-CN',{maximumFractionDigits:4}),money=v=>Number(v||0).toFixed(2)
 const typeName=v=>({full:'全仓',partial:'范围',cycle:'循环'})[v]||v,statusTag=v=>v==='confirmed'?'success':v==='recounting'?'warning':'primary'
-const batchStatus=v=>({normal:'正常',near_expiry:'临期',expired:'过期',missing_expiry:'效期缺失'})[v]||v
+const batchStatus=v=>({normal:'正常',near_expiry:'临期',expired:'过期',missing_expiry:'效期缺失',not_managed:'未启用'})[v]||v
 onMounted(load)
 </script>
 

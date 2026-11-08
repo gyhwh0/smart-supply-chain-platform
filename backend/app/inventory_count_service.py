@@ -109,7 +109,7 @@ def create_count(db: Session, data: dict, user: User) -> InventoryCount:
         if scope.get("skus") and product.sku not in scope["skus"]: continue
         if scope.get("locations") and location not in scope["locations"]: continue
         if scope.get("supplier_ids") and row["supplier_id"] not in scope["supplier_ids"]: continue
-        status = _batch_status(row["production_date"], row["shelf_life_days"], near_days)
+        status = _batch_status(row["production_date"], row["shelf_life_days"], near_days) if product.batch_management else "not_managed"
         if scope.get("near_expiry_only") and status not in {"near_expiry", "expired"}: continue
         count.items.append(InventoryCountItem(
             product_id=product_id, unit_id=row["unit"].id, batch_no=batch_no or None, location=location or None,
