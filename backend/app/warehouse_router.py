@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.auth import require_permission
 from app.database import get_db
-from app.models import InventoryCount, Product, ProductUnit, Supplier, User, WarehouseDocument
+from app.models import InventoryCount, Product, ProductUnit, Supplier, User, WarehouseDocument, WarehouseDocumentItem
 from app.schemas import InventoryCountCreate, InventoryCountEntries, InventoryRecountIn, WarehouseDocumentIn
 from app import deletion_service, inventory_count_service, warehouse_service
 
@@ -26,7 +26,8 @@ def options(
     ).all()
     users = db.scalars(select(User).where(User.active.is_(True), User.role.in_(["admin", "warehouse", "purchaser"])).order_by(User.name)).all()
     suppliers = db.scalars(select(Supplier).where(Supplier.active.is_(True)).order_by(Supplier.name)).all()
-    stock = warehouse_service.stock_rows(db)
+    warehouses = db.scalars(select(WarehouseDocument.warehouse).distinct().order_by(WarehouseDocument.warehouse)).all()
+    locations = db.scalars(select(WarehouseDocumentItem.location).where(WarehouseDocumentItem.location.is_not(None)).distinct().order_by(WarehouseDocumentItem.location)).all()
     return {"products": [{
         "id": product.id, "name": product.name, "category": product.category, "sku": product.sku,
         "units": [{"id": unit.id, "name": unit.name, "is_base": unit.is_base,
@@ -35,9 +36,9 @@ def options(
         "default_location": product.default_location,
     } for product in products], "users": [{"id":u.id,"name":u.name} for u in users],
       "suppliers": [{"id":s.id,"name":s.name} for s in suppliers],
-      "warehouses": ["主仓库"],
+      "warehouses": sorted({"主仓库", *warehouses}),
       "categories": sorted({p.category for p in products}),
-      "locations": sorted({row.get("location") for row in stock if row.get("location")}),
+      "locations": locations,
       "difference_reasons": inventory_count_service.REASONS}
 
 
