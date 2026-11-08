@@ -117,6 +117,23 @@ def create_count(db: Session, data: dict, user: User) -> InventoryCount:
             assigned_user_ids_json=json.dumps(data.get("participant_ids") or [data["responsible_id"]]),
             system_qty_base=row["quantity"], avg_cost_base=row["avg_cost"] or 0,
         ))
+    # 全仓盘点必须覆盖没有库存流水或账面为零的在用商品，否则“零账面、现场有货”
+    # 永远不会进入任务，也就无法被识别为盘盈。
+    if count.count_type == "full":
+        existing_product_ids = {item.product_id for item in count.items}
+        products = db.scalars(select(Product).options(selectinload(Product.units)).where(Product.active.is_(True))).unique().all()
+        for product in products:
+            if product.id in existing_product_ids:
+                continue
+            base_unit = next((unit for unit in product.units if unit.is_base), None)
+            if not base_unit:
+                continue
+            count.items.append(InventoryCountItem(
+                product_id=product.id, unit_id=base_unit.id, location=product.default_location,
+                batch_status="missing_expiry" if product.batch_management else "not_managed",
+                assigned_user_ids_json=json.dumps(data.get("participant_ids") or [data["responsible_id"]]),
+                system_qty_base=0, avg_cost_base=Decimal(base_unit.reference_purchase_price or 0),
+            ))
     db.add(InventoryCountLog(count_id=count.id, action="created", operator_id=user.id,
                              detail_json=json.dumps({"scope": scope, "items": len(count.items)}, ensure_ascii=False)))
     db.commit()
@@ -140,6 +157,12 @@ def save_items(db: Session, count_id: int, rows: list[dict], user: User):
     for row in rows:
         item = items.get(row.get("id"))
         if not item: continue
+        client_updated_at = row.get("updated_at")
+        if client_updated_at:
+            if isinstance(client_updated_at, str):
+                client_updated_at = datetime.fromisoformat(client_updated_at.replace("Z", "+00:00")).replace(tzinfo=None)
+            if item.updated_at and abs((item.updated_at - client_updated_at).total_seconds()) > 0.001:
+                raise ValueError(f"{item.product.name}已被其他盘点人员更新，请刷新后再保存，避免覆盖他人结果")
         product = db.get(Product, item.product_id)
         batch_no = (row.get("batch_no") or "").strip() or None
         production_date = row.get("production_date")
@@ -161,6 +184,41 @@ def save_items(db: Session, count_id: int, rows: list[dict], user: User):
     count.status="counting"
     db.add(InventoryCountLog(count_id=count.id, action="count_saved", operator_id=user.id,
                              detail_json=json.dumps({"item_ids": [row.get("id") for row in rows]})))
+    db.commit()
+    return db.scalar(query().where(InventoryCount.id == count_id))
+
+
+def add_external_batch(db: Session, count_id: int, data: dict, user: User):
+    count = db.scalar(query().where(InventoryCount.id == count_id).with_for_update())
+    if not count or count.status in {"confirmed", "cancelled"}:
+        raise ValueError("盘点单不存在或已结束")
+    product = db.scalar(select(Product).options(selectinload(Product.units)).where(Product.id == data["product_id"], Product.active.is_(True)))
+    if not product:
+        raise ValueError("商品不存在或已停用")
+    base_unit = next((unit for unit in product.units if unit.is_base), None)
+    if not base_unit:
+        raise ValueError("商品未配置基础单位")
+    batch_no = (data.get("batch_no") or "").strip() or None
+    if product.batch_management and (not batch_no or not data.get("production_date") or not data.get("shelf_life_days")):
+        raise ValueError("批次管理商品必须填写批次号、生产日期和保质期")
+    duplicate = next((item for item in count.items if item.product_id == product.id and
+                      (item.batch_no or "") == (batch_no or "") and
+                      (item.location or "") == ((data.get("location") or product.default_location) or "")), None)
+    if duplicate:
+        raise ValueError("该商品、批次和库位已在盘点任务中，请直接录入原盘点项")
+    quantity = Decimal(str(data["actual_quantity"]))
+    item = InventoryCountItem(product_id=product.id, unit_id=base_unit.id, batch_no=batch_no,
+        location=(data.get("location") or product.default_location), production_date=data.get("production_date"),
+        shelf_life_days=data.get("shelf_life_days"),
+        batch_status=_batch_status(data.get("production_date"), data.get("shelf_life_days")) if product.batch_management else "not_managed",
+        assigned_user_ids_json=count.participant_ids_json, system_qty_base=0,
+        first_count_qty_base=quantity, final_qty_base=quantity, avg_cost_base=Decimal(base_unit.reference_purchase_price or 0),
+        difference_qty_base=quantity, difference_amount=quantity * Decimal(base_unit.reference_purchase_price or 0),
+        difference_rate=100, difference_reason=data.get("difference_reason") or "系统外批次",
+        reason_note=data.get("reason_note"), status="counted", counted_by=user.id, counted_at=datetime.now())
+    count.items.append(item); count.status="counting"
+    db.add(InventoryCountLog(count_id=count.id, action="external_batch_added", operator_id=user.id,
+        detail_json=json.dumps({"product_id": product.id, "batch_no": batch_no, "quantity": str(quantity)}, ensure_ascii=False)))
     db.commit()
     return db.scalar(query().where(InventoryCount.id == count_id))
 
@@ -230,7 +288,8 @@ def output(count: InventoryCount, detail=False):
                 "avg_cost":float(item.avg_cost_base),"difference_quantity":float(item.difference_qty_base),
                 "difference_amount":float(item.difference_amount),"difference_rate":float(item.difference_rate),
                 "difference_reason":item.difference_reason,"reason_note":item.reason_note,"recount_required":item.recount_required,
-                "status":item.status,"counter_name":item.counter.name if item.counter else None})
+                "status":item.status,"counter_name":item.counter.name if item.counter else None,
+                "updated_at":item.updated_at})
     differences=[item for item in count.items if item.final_qty_base is not None and item.difference_qty_base]
     return {"id":count.id,"count_no":count.count_no,"warehouse":count.warehouse,"count_type":count.count_type,
         "planned_start":count.planned_start,"planned_end":count.planned_end,"responsible_id":count.responsible_id,

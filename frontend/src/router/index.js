@@ -17,6 +17,7 @@ const routes = [
       { path: 'suppliers', component: () => import('@/views/Suppliers.vue'), meta: { permission: 'supplier_management' } },
       { path: 'categories', component: () => import('@/views/Categories.vue'), meta: { permission: 'category_management' } },
       { path: 'products', component: () => import('@/views/Products.vue'), meta: { permission: 'product_management' } },
+      { path: 'product-import', component: () => import('@/views/ProductImport.vue'), meta: { permission: 'product_management' } },
       { path: 'assignments', component: () => import('@/views/Assignments.vue'), meta: { permission: 'assignment_management' } },
       { path: 'quotes', component: () => import('@/views/Quotes.vue'), meta: { permission: 'quote_management' } },
       { path: 'analysis', component: () => import('@/views/Analysis.vue'), meta: { permission: 'analysis' } },

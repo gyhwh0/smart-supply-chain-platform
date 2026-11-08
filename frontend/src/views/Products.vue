@@ -2,7 +2,7 @@
   <div>
     <div class="page-header">
       <div><h2>{{ isSupplier ? '已分配商品' : '商品管理' }}</h2><p>商品关联统一分类，并支持基础单位、箱、件等多单位换算</p></div>
-      <div v-if="!isSupplier" class="header-actions"><el-button @click="downloadTemplate">下载Excel模板</el-button><el-upload :show-file-list="false" :http-request="uploadExcel" accept=".xlsx"><el-button type="success" plain>一键导入商品</el-button></el-upload><el-button type="danger" plain :disabled="!selected.length" @click="batchRemove">批量删除（{{ selected.length }}）</el-button><el-button type="primary" @click="openCreate"><el-icon><Plus /></el-icon>新增商品</el-button></div>
+      <div v-if="!isSupplier" class="header-actions"><el-button type="success" plain @click="$router.push('/product-import')">商品Excel导入中心</el-button><el-button type="danger" plain :disabled="!selected.length" @click="batchRemove">批量删除（{{ selected.length }}）</el-button><el-button type="primary" @click="openCreate"><el-icon><Plus /></el-icon>新增商品</el-button></div>
     </div>
     <el-card class="panel">
       <div class="product-toolbar">
@@ -98,7 +98,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { addProductUnit, batchDeleteProducts, createProduct, deleteProduct, downloadProductImportTemplate, downloadProductQualityReport, getAssignments, getCategories, getCustomers, getProducts, getSuppliers, importProducts, updateProduct, updateProductUnitPrices, uploadProductImage, uploadProductQualityReport } from '@/api'
+import { addProductUnit, batchDeleteProducts, createProduct, deleteProduct, downloadProductQualityReport, getAssignments, getCategories, getCustomers, getProducts, getSuppliers, updateProduct, updateProductUnitPrices, uploadProductImage, uploadProductQualityReport } from '@/api'
 import { getUser } from '@/utils/auth'
 
 const isSupplier = computed(() => getUser()?.role === 'supplier')
@@ -134,10 +134,6 @@ const filteredRows = computed(() => {
   })
 })
 const clearFilters = () => { keyword.value=''; categoryFilter.value=null; statusFilter.value='all' }
-const saveBlob=(blob,name)=>{const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();URL.revokeObjectURL(url)}
-const downloadTemplate=async()=>saveBlob(await downloadProductImportTemplate(),'商品批量导入模板.xlsx')
-const uploadExcel=async({file})=>{const result=await importProducts(file);ElMessage.success(result.message);await load()}
-
 const load = async () => {
   ;[categories.value, suppliers.value, customers.value] = await Promise.all([getCategories(), getSuppliers(), isSupplier.value ? Promise.resolve([]) : getCustomers()])
   if (isSupplier.value) {

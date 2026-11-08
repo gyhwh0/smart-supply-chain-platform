@@ -142,6 +142,18 @@ def startup():
             "abc_level": "VARCHAR(1) NOT NULL DEFAULT 'B'",
             "batch_management": "BOOLEAN NOT NULL DEFAULT 0",
             "default_location": "VARCHAR(100) NULL",
+            "barcode": "VARCHAR(80) NULL",
+            "brand": "VARCHAR(100) NULL",
+            "specification": "VARCHAR(120) NULL",
+            "origin": "VARCHAR(120) NULL",
+            "grade": "VARCHAR(50) NULL",
+            "traceability_code": "VARCHAR(100) NULL",
+            "fresh_attribute": "VARCHAR(30) NULL",
+            "slaughter_batch": "VARCHAR(100) NULL",
+            "aquatic_state": "VARCHAR(30) NULL",
+            "inventory_min": "DECIMAL(14,4) NULL",
+            "inventory_max": "DECIMAL(14,4) NULL",
+            "detail_images_json": "TEXT NULL",
         },
         "suppliers": {
             "on_time_rate": "DECIMAL(6,2) NOT NULL DEFAULT 100",
@@ -158,6 +170,7 @@ def startup():
             "daily_capacity_base": "DECIMAL(14,4) NULL",
             "order_capacity_base": "DECIMAL(14,4) NULL",
             "quota_percent": "DECIMAL(7,4) NOT NULL DEFAULT 0",
+            "min_order_base": "DECIMAL(14,4) NULL",
         },
         "purchase_orders": {
             "source_requirement_no": "VARCHAR(50) NULL",
@@ -179,6 +192,10 @@ def startup():
         "product_units": {
             "sales_price": "DECIMAL(12,4) NULL",
             "reference_purchase_price": "DECIMAL(12,4) NULL",
+            "vip_sales_price": "DECIMAL(12,4) NULL",
+            "key_account_sales_price": "DECIMAL(12,4) NULL",
+            "min_sales_price": "DECIMAL(12,4) NULL",
+            "max_sales_price": "DECIMAL(12,4) NULL",
         },
         "warehouse_document_items": {
             "location": "VARCHAR(100) NULL",

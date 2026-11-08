@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.auth import require_permission
 from app.database import get_db
 from app.models import InventoryCount, Product, ProductUnit, Supplier, User, WarehouseDocument, WarehouseDocumentItem
-from app.schemas import InventoryCountCreate, InventoryCountEntries, InventoryRecountIn, WarehouseDocumentIn
+from app.schemas import InventoryCountCreate, InventoryCountEntries, InventoryCountExtraBatchIn, InventoryRecountIn, WarehouseDocumentIn
 from app import deletion_service, inventory_count_service, warehouse_service
 
 
@@ -69,6 +69,13 @@ def create_count(data:InventoryCountCreate,user:User=Depends(require_permission(
 @router.put("/counts/{count_id}/entries")
 def save_count_entries(count_id:int,data:InventoryCountEntries,user:User=Depends(require_permission("warehouse_management")),db:Session=Depends(get_db)):
     try: row=inventory_count_service.save_items(db,count_id,[item.model_dump() for item in data.items],user)
+    except ValueError as exc: raise HTTPException(400,str(exc)) from exc
+    return inventory_count_service.output(row,True)
+
+
+@router.post("/counts/{count_id}/external-batches")
+def add_count_external_batch(count_id:int,data:InventoryCountExtraBatchIn,user:User=Depends(require_permission("warehouse_management")),db:Session=Depends(get_db)):
+    try: row=inventory_count_service.add_external_batch(db,count_id,data.model_dump(),user)
     except ValueError as exc: raise HTTPException(400,str(exc)) from exc
     return inventory_count_service.output(row,True)
 

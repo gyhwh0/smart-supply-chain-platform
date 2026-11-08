@@ -40,8 +40,17 @@ export const uploadProductImage = (id, file) => {
   data.append('file', file)
   return request.post(`/api/products/${id}/image`, data, { headers: { 'Content-Type': 'multipart/form-data' } })
 }
-export const downloadProductImportTemplate = () => request.get('/api/product-import/template', { responseType: 'blob' })
-export const importProducts = file => { const data = new FormData(); data.append('file', file); return request.post('/api/product-import', data) }
+export const getProductImportConfig = () => request.get('/api/product-import/config')
+export const downloadProductImportTemplate = params => request.get('/api/product-import/template', { params, responseType: 'blob' })
+export const exportProductsForImport = () => request.get('/api/product-import/export', { responseType: 'blob' })
+export const previewProductImport = (file, mode = 'incremental') => { const data = new FormData(); data.append('file', file); data.append('mode', mode); return request.post('/api/product-import/preview', data) }
+export const validateProductImport = (id, data) => request.post(`/api/product-import/validate/${id}`, data)
+export const commitProductImport = id => request.post(`/api/product-import/commit/${id}`)
+export const getProductImportJobs = () => request.get('/api/product-import/jobs')
+export const downloadProductImportOriginal = id => request.get(`/api/product-import/jobs/${id}/original`, { responseType: 'blob' })
+export const downloadProductImportErrors = id => request.get(`/api/product-import/jobs/${id}/errors`, { responseType: 'blob' })
+export const batchAdjustImportedProducts = (id, data) => request.post(`/api/product-import/jobs/${id}/batch-adjust`, data)
+export const importProductImages = file => { const data = new FormData(); data.append('file', file); return request.post('/api/product-import/images', data) }
 export const getAssignments = () => request.get('/api/assignments')
 export const createAssignments = (data) => request.post('/api/assignments', data)
 export const saveQuote = (assignmentId, data) => request.put(`/api/quotes/${assignmentId}`, data)
@@ -114,6 +123,7 @@ export const getInventoryCounts = params => request.get('/api/warehouse/counts',
 export const getInventoryCount = id => request.get(`/api/warehouse/counts/${id}`)
 export const createInventoryCount = data => request.post('/api/warehouse/counts', data)
 export const saveInventoryCountEntries = (id, data) => request.put(`/api/warehouse/counts/${id}/entries`, data)
+export const addInventoryCountExternalBatch = (id, data) => request.post(`/api/warehouse/counts/${id}/external-batches`, data)
 export const createInventoryRecount = (id, data) => request.post(`/api/warehouse/counts/${id}/recount`, data)
 export const confirmInventoryCount = id => request.post(`/api/warehouse/counts/${id}/confirm`)
 export const downloadInventoryCountTemplate = id => request.get(`/api/warehouse/counts/${id}/template`, { responseType: 'blob' })

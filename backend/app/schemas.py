@@ -100,6 +100,10 @@ class UnitIn(BaseModel):
 class UnitOut(UnitIn):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    vip_sales_price: Decimal | None = None
+    key_account_sales_price: Decimal | None = None
+    min_sales_price: Decimal | None = None
+    max_sales_price: Decimal | None = None
 
 
 class UnitPriceIn(BaseModel):
@@ -185,6 +189,20 @@ class ProductOut(BaseModel):
     active: bool
     units: list[UnitOut]
     supplier_ids: list[int] = Field(default_factory=list)
+    barcode: str | None = None
+    brand: str | None = None
+    specification: str | None = None
+    origin: str | None = None
+    grade: str | None = None
+    traceability_code: str | None = None
+    fresh_attribute: str | None = None
+    slaughter_batch: str | None = None
+    aquatic_state: str | None = None
+    inventory_min: Decimal | None = None
+    inventory_max: Decimal | None = None
+    abc_level: str = "B"
+    batch_management: bool = False
+    default_location: str | None = None
 
 
 class AssignmentCreate(BaseModel):
@@ -384,6 +402,7 @@ class InventoryCountCreate(BaseModel):
 
 class InventoryCountItemEntry(BaseModel):
     id: int
+    updated_at: datetime | None = None
     actual_quantity: Decimal = Field(ge=0)
     batch_no: str | None = None
     production_date: date | None = None
@@ -394,6 +413,17 @@ class InventoryCountItemEntry(BaseModel):
 
 class InventoryCountEntries(BaseModel):
     items: list[InventoryCountItemEntry] = Field(min_length=1)
+
+
+class InventoryCountExtraBatchIn(BaseModel):
+    product_id: int
+    location: str | None = None
+    batch_no: str | None = None
+    production_date: date | None = None
+    shelf_life_days: int | None = Field(default=None, ge=1)
+    actual_quantity: Decimal = Field(gt=0)
+    difference_reason: str = "系统外批次"
+    reason_note: str | None = None
 
 
 class InventoryRecountIn(BaseModel):

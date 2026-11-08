@@ -82,6 +82,18 @@ class Product(Base):
     abc_level: Mapped[str] = mapped_column(String(1), default="B")
     batch_management: Mapped[bool] = mapped_column(Boolean, default=False)
     default_location: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    barcode: Mapped[str | None] = mapped_column(String(80), unique=True, index=True, nullable=True)
+    brand: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    specification: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    origin: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    grade: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    traceability_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    fresh_attribute: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    slaughter_batch: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    aquatic_state: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    inventory_min: Mapped[Decimal | None] = mapped_column(Numeric(14, 4), nullable=True)
+    inventory_max: Mapped[Decimal | None] = mapped_column(Numeric(14, 4), nullable=True)
+    detail_images_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     units: Mapped[list["ProductUnit"]] = relationship(
@@ -136,6 +148,10 @@ class ProductUnit(Base):
     is_base: Mapped[bool] = mapped_column(Boolean, default=False)
     sales_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
     reference_purchase_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
+    vip_sales_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
+    key_account_sales_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
+    min_sales_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
+    max_sales_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
 
     product: Mapped[Product] = relationship(back_populates="units")
 
@@ -155,6 +171,7 @@ class ProductSupplier(Base):
     daily_capacity_base: Mapped[Decimal | None] = mapped_column(Numeric(14, 4), nullable=True)
     order_capacity_base: Mapped[Decimal | None] = mapped_column(Numeric(14, 4), nullable=True)
     quota_percent: Mapped[Decimal] = mapped_column(Numeric(7, 4), default=0)
+    min_order_base: Mapped[Decimal | None] = mapped_column(Numeric(14, 4), nullable=True)
 
     product: Mapped[Product] = relationship(back_populates="assignments")
     supplier: Mapped[Supplier] = relationship(back_populates="assignments")
@@ -185,6 +202,38 @@ class SmartSplitSetting(Base):
     on_time_weight: Mapped[Decimal] = mapped_column(Numeric(6, 4), default=0.4)
     inspection_weight: Mapped[Decimal] = mapped_column(Numeric(6, 4), default=0.4)
     return_weight: Mapped[Decimal] = mapped_column(Numeric(6, 4), default=0.2)
+
+
+class ProductImportMapping(Base):
+    __tablename__ = "product_import_mappings"
+
+    name: Mapped[str] = mapped_column(String(100), unique=True)
+    header_signature: Mapped[str] = mapped_column(String(64), index=True)
+    mapping_json: Mapped[str] = mapped_column(Text)
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    creator: Mapped[User] = relationship()
+
+
+class ProductImportJob(Base):
+    __tablename__ = "product_import_jobs"
+
+    job_no: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    filename: Mapped[str] = mapped_column(String(255))
+    file_path: Mapped[str] = mapped_column(String(255))
+    import_mode: Mapped[str] = mapped_column(String(30), default="incremental")
+    status: Mapped[str] = mapped_column(String(30), default="uploaded", index=True)
+    header_signature: Mapped[str] = mapped_column(String(64), index=True)
+    mapping_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    preview_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    errors_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    summary_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_report_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    committed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    creator: Mapped[User] = relationship()
 
 
 class Quote(Base):
