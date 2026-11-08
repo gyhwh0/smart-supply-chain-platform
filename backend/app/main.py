@@ -26,7 +26,7 @@ from app.auth import (
 )
 from app.config import settings
 from app.database import Base, SessionLocal, engine, get_db
-from app import deletion_service, finance_router, inventory_service, management_report_router, picking_service, report_service, sales_order_service, sales_report_service, warehouse_service, wecom_service
+from app import deletion_service, finance_router, inventory_service, management_report_router, picking_service, report_service, sales_order_service, sales_report_service, smart_split_router, warehouse_service, wecom_service
 from app.deletion_router import router as deletion_router
 from app.wecom_router import router as wecom_router
 from app.inbound_router import router as inbound_router
@@ -87,6 +87,7 @@ app.include_router(warehouse_router)
 app.include_router(mini_router)
 app.include_router(finance_router.router)
 app.include_router(management_report_router.router)
+app.include_router(smart_split_router.router)
 app.include_router(deletion_router)
 app.add_middleware(
     CORSMiddleware,
@@ -137,6 +138,29 @@ def startup():
             # schema migration. Newly created products still use the model/schema
             # default (False) and must be explicitly allocated.
             "mini_all_customers": "BOOLEAN NOT NULL DEFAULT 1",
+        },
+        "suppliers": {
+            "on_time_rate": "DECIMAL(6,2) NOT NULL DEFAULT 100",
+            "inspection_pass_rate": "DECIMAL(6,2) NOT NULL DEFAULT 100",
+            "return_rate": "DECIMAL(6,2) NOT NULL DEFAULT 0",
+            "payment_term_days": "INTEGER NOT NULL DEFAULT 0",
+        },
+        "categories": {
+            "purchase_loss_rate": "DECIMAL(6,3) NOT NULL DEFAULT 0",
+        },
+        "product_suppliers": {
+            "split_enabled": "BOOLEAN NOT NULL DEFAULT 1",
+            "priority": "INTEGER NOT NULL DEFAULT 100",
+            "daily_capacity_base": "DECIMAL(14,4) NULL",
+            "order_capacity_base": "DECIMAL(14,4) NULL",
+            "quota_percent": "DECIMAL(7,4) NOT NULL DEFAULT 0",
+        },
+        "purchase_orders": {
+            "source_requirement_no": "VARCHAR(50) NULL",
+            "split_plan_id": "INTEGER NULL",
+            "is_split_order": "BOOLEAN NOT NULL DEFAULT 0",
+            "split_strategy": "VARCHAR(30) NULL",
+            "split_share": "DECIMAL(7,4) NULL",
         },
         "sales_order_items": {
             "display_name": "VARCHAR(120) NULL",
@@ -1511,6 +1535,11 @@ def order_output(order: PurchaseOrder):
         "notes": order.notes,
         "report_footer": order.report_footer,
         "status": order.status,
+        "source_requirement_no": order.source_requirement_no,
+        "split_plan_id": order.split_plan_id,
+        "is_split_order": order.is_split_order,
+        "split_strategy": order.split_strategy,
+        "split_share": float(order.split_share) if order.split_share is not None else None,
         "confirmed_at": order.confirmed_at,
         "created_at": order.created_at,
         "creator_name": order.creator.name,
@@ -1754,6 +1783,8 @@ def confirm_order(
     order = db.get(PurchaseOrder, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="采购订单不存在")
+    if order.status != "draft":
+        raise HTTPException(status_code=400, detail="只有采购草稿可以确认下达")
     order.status = "confirmed"
     order.confirmed_at = datetime.now()
     db.commit()
@@ -1857,6 +1888,7 @@ def sales_order_output(order: SalesOrder):
             "product_ids": [item.product_id for item in link.purchase_order.items],
         }
         for link in order.procurement_links
+        if link.purchase_order.status != "cancelled"
     ]
     addition_items = [item for item in items if item["is_addition"]]
     return {
@@ -2172,6 +2204,7 @@ def sales_procurement_options(
     procured_product_ids = {
         item.product_id
         for link in order.procurement_links
+        if link.purchase_order.status != "cancelled"
         for item in link.purchase_order.items
     }
     items = []
@@ -2227,6 +2260,7 @@ def generate_purchases_from_sales(
     procured_product_ids = {
         item.product_id
         for link in sales_order.procurement_links
+        if link.purchase_order.status != "cancelled"
         for item in link.purchase_order.items
     }
     grouped: dict[int, dict] = {}
@@ -2334,6 +2368,7 @@ def order_supplier_map(order: SalesOrder):
             "name": link.purchase_order.supplier.name,
         }
         for link in order.procurement_links
+        if link.purchase_order.status != "cancelled"
         for item in link.purchase_order.items
     }
 

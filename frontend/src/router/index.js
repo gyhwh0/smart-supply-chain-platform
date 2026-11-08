@@ -21,6 +21,7 @@ const routes = [
       { path: 'quotes', component: () => import('@/views/Quotes.vue'), meta: { permission: 'quote_management' } },
       { path: 'analysis', component: () => import('@/views/Analysis.vue'), meta: { permission: 'analysis' } },
       { path: 'orders', component: () => import('@/views/Orders.vue'), meta: { permission: 'order_management' } },
+      { path: 'smart-split', component: () => import('@/views/SmartSplit.vue'), meta: { permission: 'order_management' } },
       { path: 'supplier-orders', component: () => import('@/views/SupplierOrders.vue'), meta: { permission: 'supplier_order_view' } },
       { path: 'sales-orders', component: () => import('@/views/SalesOrders.vue'), meta: { permission: 'sales_order_management' } },
       { path: 'sales-summary', component: () => import('@/views/SalesSummary.vue'), meta: { permission: 'sales_summary' } },

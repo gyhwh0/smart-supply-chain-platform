@@ -35,6 +35,10 @@ class Supplier(Base):
     email: Mapped[str | None] = mapped_column(String(100), nullable=True)
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    on_time_rate: Mapped[Decimal] = mapped_column(Numeric(6, 2), default=100)
+    inspection_pass_rate: Mapped[Decimal] = mapped_column(Numeric(6, 2), default=100)
+    return_rate: Mapped[Decimal] = mapped_column(Numeric(6, 2), default=0)
+    payment_term_days: Mapped[int] = mapped_column(Integer, default=0)
 
     users: Mapped[list[User]] = relationship(back_populates="supplier")
     assignments: Mapped[list["ProductSupplier"]] = relationship(back_populates="supplier")
@@ -46,6 +50,7 @@ class Category(Base):
     name: Mapped[str] = mapped_column(String(100), unique=True)
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    purchase_loss_rate: Mapped[Decimal] = mapped_column(Numeric(6, 3), default=0)
 
     products: Mapped[list["Product"]] = relationship(back_populates="category_rel")
 
@@ -142,6 +147,11 @@ class ProductSupplier(Base):
     supplier_id: Mapped[int] = mapped_column(ForeignKey("suppliers.id"))
     assigned_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    split_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    priority: Mapped[int] = mapped_column(Integer, default=100)
+    daily_capacity_base: Mapped[Decimal | None] = mapped_column(Numeric(14, 4), nullable=True)
+    order_capacity_base: Mapped[Decimal | None] = mapped_column(Numeric(14, 4), nullable=True)
+    quota_percent: Mapped[Decimal] = mapped_column(Numeric(7, 4), default=0)
 
     product: Mapped[Product] = relationship(back_populates="assignments")
     supplier: Mapped[Supplier] = relationship(back_populates="assignments")
@@ -149,6 +159,29 @@ class ProductSupplier(Base):
     quotes: Mapped[list["Quote"]] = relationship(
         back_populates="assignment", cascade="all, delete-orphan"
     )
+    tier_prices: Mapped[list["SupplierTierPrice"]] = relationship(
+        back_populates="assignment", cascade="all, delete-orphan", order_by="SupplierTierPrice.min_base_quantity"
+    )
+
+
+class SupplierTierPrice(Base):
+    __tablename__ = "supplier_tier_prices"
+    __table_args__ = (UniqueConstraint("assignment_id", "min_base_quantity", name="uq_supplier_tier_threshold"),)
+
+    assignment_id: Mapped[int] = mapped_column(ForeignKey("product_suppliers.id"), index=True)
+    min_base_quantity: Mapped[Decimal] = mapped_column(Numeric(14, 4))
+    base_unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 4))
+
+    assignment: Mapped[ProductSupplier] = relationship(back_populates="tier_prices")
+
+
+class SmartSplitSetting(Base):
+    __tablename__ = "smart_split_settings"
+
+    name: Mapped[str] = mapped_column(String(30), unique=True, default="default")
+    on_time_weight: Mapped[Decimal] = mapped_column(Numeric(6, 4), default=0.4)
+    inspection_weight: Mapped[Decimal] = mapped_column(Numeric(6, 4), default=0.4)
+    return_weight: Mapped[Decimal] = mapped_column(Numeric(6, 4), default=0.2)
 
 
 class Quote(Base):
@@ -177,6 +210,11 @@ class PurchaseOrder(Base):
     report_footer: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="draft")
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    source_requirement_no: Mapped[str | None] = mapped_column(String(50), index=True, nullable=True)
+    split_plan_id: Mapped[int | None] = mapped_column(ForeignKey("procurement_split_plans.id"), index=True, nullable=True)
+    is_split_order: Mapped[bool] = mapped_column(Boolean, default=False)
+    split_strategy: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    split_share: Mapped[Decimal | None] = mapped_column(Numeric(7, 4), nullable=True)
 
     supplier: Mapped[Supplier] = relationship()
     creator: Mapped[User] = relationship(foreign_keys=[created_by])
@@ -358,6 +396,67 @@ class PurchaseRequisitionOrder(Base):
 
     requisition: Mapped[PurchaseRequisition] = relationship(back_populates="order_links")
     purchase_order: Mapped[PurchaseOrder] = relationship()
+
+
+class ProcurementSplitPlan(Base):
+    __tablename__ = "procurement_split_plans"
+
+    plan_no: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    source_type: Mapped[str] = mapped_column(String(20), index=True)
+    source_id: Mapped[int] = mapped_column(Integer, index=True)
+    source_no: Mapped[str] = mapped_column(String(50), index=True)
+    strategy: Mapped[str] = mapped_column(String(30))
+    reduction_strategy: Mapped[str] = mapped_column(String(30), default="proportional")
+    needed_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="generated", index=True)
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    generated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    creator: Mapped[User] = relationship(foreign_keys=[created_by])
+    items: Mapped[list["ProcurementSplitPlanItem"]] = relationship(
+        back_populates="plan", cascade="all, delete-orphan", order_by="ProcurementSplitPlanItem.id"
+    )
+
+
+class ProcurementSplitPlanItem(Base):
+    __tablename__ = "procurement_split_plan_items"
+
+    plan_id: Mapped[int] = mapped_column(ForeignKey("procurement_split_plans.id"), index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
+    base_unit_id: Mapped[int] = mapped_column(ForeignKey("product_units.id"))
+    demand_base_quantity: Mapped[Decimal] = mapped_column(Numeric(14, 4))
+    loss_rate: Mapped[Decimal] = mapped_column(Numeric(7, 4), default=0)
+    purchase_base_quantity: Mapped[Decimal] = mapped_column(Numeric(14, 4))
+    existing_base_quantity: Mapped[Decimal] = mapped_column(Numeric(14, 4), default=0)
+
+    plan: Mapped[ProcurementSplitPlan] = relationship(back_populates="items")
+    product: Mapped[Product] = relationship()
+    base_unit: Mapped[ProductUnit] = relationship()
+    allocations: Mapped[list["ProcurementSplitAllocation"]] = relationship(
+        back_populates="plan_item", cascade="all, delete-orphan", order_by="ProcurementSplitAllocation.id"
+    )
+
+
+class ProcurementSplitAllocation(Base):
+    __tablename__ = "procurement_split_allocations"
+
+    plan_item_id: Mapped[int] = mapped_column(ForeignKey("procurement_split_plan_items.id"), index=True)
+    assignment_id: Mapped[int] = mapped_column(ForeignKey("product_suppliers.id"))
+    supplier_id: Mapped[int] = mapped_column(ForeignKey("suppliers.id"), index=True)
+    purchase_order_id: Mapped[int | None] = mapped_column(ForeignKey("purchase_orders.id"), index=True, nullable=True)
+    base_quantity: Mapped[Decimal] = mapped_column(Numeric(14, 4))
+    base_unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 4))
+    price_source: Mapped[str] = mapped_column(String(30), default="standard_quote")
+    allocation_percent: Mapped[Decimal] = mapped_column(Numeric(7, 4))
+    priority_snapshot: Mapped[int] = mapped_column(Integer, default=100)
+    quality_score_snapshot: Mapped[Decimal] = mapped_column(Numeric(7, 4), default=0)
+
+    plan_item: Mapped[ProcurementSplitPlanItem] = relationship(back_populates="allocations")
+    assignment: Mapped[ProductSupplier] = relationship()
+    supplier: Mapped[Supplier] = relationship()
+    purchase_order: Mapped[PurchaseOrder | None] = relationship(foreign_keys=[purchase_order_id])
 
 
 class LogisticsStaff(Base):

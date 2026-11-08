@@ -46,6 +46,8 @@ REPORTS = {
     "adjustments": ("加减单统计表", "加单与实配/验收减量分开统计，避免口径混淆"),
 }
 
+SPLIT_STRATEGIES = {"quota": "配额比例", "capacity": "供货能力", "price": "价格优先", "quality": "质量评分"}
+
 
 @dataclass
 class ReportFilters:
@@ -118,6 +120,8 @@ def _sales_query(filters: ReportFilters):
         statement = statement.where(SalesOrder.created_by == filters.creator_id)
     if filters.status in {"draft", "confirmed"}:
         statement = statement.where(SalesOrder.status == filters.status)
+    elif filters.status == "cancelled":
+        statement = statement.where(SalesOrder.id == -1)
     return statement
 
 
@@ -144,6 +148,8 @@ def _purchase_map(order: SalesOrder) -> dict[int, dict]:
     output = {}
     for link in order.procurement_links:
         purchase = link.purchase_order
+        if purchase.status == "cancelled":
+            continue
         for item in purchase.items:
             if item.product_id not in output and item.unit.conversion_rate:
                 output[item.product_id] = {
@@ -506,7 +512,7 @@ def _purchase_orders(db: Session, filters: ReportFilters) -> dict:
     ).order_by(PurchaseOrder.id.desc())
     if filters.supplier_id: statement = statement.where(PurchaseOrder.supplier_id == filters.supplier_id)
     if filters.creator_id: statement = statement.where(PurchaseOrder.created_by == filters.creator_id)
-    if filters.status in {"draft", "confirmed"}: statement = statement.where(PurchaseOrder.status == filters.status)
+    if filters.status in {"draft", "confirmed", "cancelled"}: statement = statement.where(PurchaseOrder.status == filters.status)
     purchases = db.scalars(statement.limit(5000)).unique().all()
     rows = []
     keyword = (filters.keyword or "").strip().lower()
@@ -515,21 +521,25 @@ def _purchase_orders(db: Session, filters: ReportFilters) -> dict:
         if not filters.date_from <= business_date <= filters.date_to: continue
         if filters.category and not any(item.product.category == filters.category for item in order.items): continue
         if filters.product_id and not any(item.product_id == filters.product_id for item in order.items): continue
-        text = f"{order.order_no} {order.supplier.name} {' '.join(item.product.name for item in order.items)}".lower()
+        text = f"{order.order_no} {order.source_requirement_no or ''} {order.supplier.name} {' '.join(item.product.name for item in order.items)}".lower()
         if keyword and keyword not in text: continue
         amount = sum((Decimal(item.quantity) * Decimal(item.unit_price) for item in order.items), Decimal("0"))
         rows.append({"business_date": business_date, "order_no": order.order_no, "supplier_name": order.supplier.name,
-                     "creator_name": order.creator.name, "status": "已确认" if order.status == "confirmed" else "草稿",
+                     "creator_name": order.creator.name, "status": {"confirmed": "已确认", "cancelled": "已撤销"}.get(order.status, "草稿"),
+                     "source_requirement_no": order.source_requirement_no or "—",
+                     "split_type": SPLIT_STRATEGIES.get(order.split_strategy, "智能拆单") if order.is_split_order else "普通采购",
                      "item_count": len(order.items), "purchase_amount": _money(amount),
                      "best_price_items": sum(item.is_best_price for item in order.items), "expected_date": order.expected_date,
                      "confirmed_at": order.confirmed_at})
     return {"columns": [_column("business_date", "业务日期", "date", 115), _column("order_no", "采购单号", "text", 185),
-                        _column("supplier_name", "供应商", "text", 160), _column("creator_name", "采购员", "text", 110),
+                        _column("source_requirement_no", "采购需求号", "text", 180), _column("supplier_name", "供应商", "text", 160),
+                        _column("split_type", "拆单方式", "status", 110), _column("creator_name", "采购员", "text", 110),
                         _column("status", "状态", "status", 90), _column("item_count", "商品行", "number", 85),
                         _column("purchase_amount", "采购金额", "money", 120), _column("best_price_items", "最优价商品", "number", 105),
                         _column("expected_date", "预计到货", "date", 110), _column("confirmed_at", "确认时间", "datetime", 165)],
             "metrics": [_metric("orders", "采购单数", len(rows)), _metric("confirmed", "已确认", sum(row["status"] == "已确认" for row in rows)),
-                        _metric("amount", "采购金额", _money(sum(Decimal(str(row["purchase_amount"])) for row in rows)), "money"),
+                        _metric("cancelled", "已撤销", sum(row["status"] == "已撤销" for row in rows)),
+                        _metric("amount", "有效采购金额", _money(sum(Decimal(str(row["purchase_amount"])) for row in rows if row["status"] != "已撤销")), "money"),
                         _metric("best", "最优价商品行", sum(row["best_price_items"] for row in rows))], "rows": rows}
 
 

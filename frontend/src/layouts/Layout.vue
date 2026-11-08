@@ -37,6 +37,9 @@
           <el-menu-item v-if="can('order_management')" index="/orders"
             >采购下单</el-menu-item
           >
+          <el-menu-item v-if="can('order_management')" index="/smart-split"
+            >智能拆单</el-menu-item
+          >
           <el-menu-item v-if="can('supplier_order_view')" index="/supplier-orders"
             >采购订单</el-menu-item
           >

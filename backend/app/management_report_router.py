@@ -83,6 +83,7 @@ def report_catalog(
         "statuses": [
             {"value": "draft", "name": "草稿"},
             {"value": "confirmed", "name": "已确认"},
+            {"value": "cancelled", "name": "已撤销（采购）"},
         ],
     }
 

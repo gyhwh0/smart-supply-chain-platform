@@ -46,13 +46,14 @@
         <el-table-column label="销售金额" width="130"><template #default="scope"><b class="amount">¥{{ money(scope.row.total_amount) }}</b></template></el-table-column>
         <el-table-column label="状态" width="110"><template #default="scope"><el-tag :type="scope.row.status === 'confirmed' ? 'success' : 'warning'">{{ scope.row.status === 'confirmed' ? '已确认' : '待确认' }}</el-tag></template></el-table-column>
         <el-table-column label="采购进度" width="120"><template #default="scope"><el-tag v-if="scope.row.purchases.length" type="success" effect="plain">{{ scope.row.purchases.length }} 张采购单</el-tag><span v-else class="muted">未生成</span></template></el-table-column>
-        <el-table-column label="操作" width="460" fixed="right">
+        <el-table-column label="操作" width="540" fixed="right">
           <template #default="scope">
             <el-button link type="primary" @click="printOrder(scope.row)">打印</el-button>
             <el-button link type="primary" @click="openEdit(scope.row)">编辑</el-button>
             <el-button v-if="scope.row.status === 'draft'" link type="success" @click="confirm(scope.row)">确认</el-button>
             <el-button link type="danger" @click="remove(scope.row)">删除</el-button>
             <el-button v-if="scope.row.status === 'confirmed' && canPurchase" link type="primary" @click="openProcurement(scope.row)">分配供应商并转采购</el-button>
+            <el-button v-if="scope.row.status === 'confirmed' && canPurchase" link type="success" @click="router.push({path:'/smart-split',query:{source:'sales',id:scope.row.id}})">智能拆单</el-button>
             <el-button v-if="scope.row.status === 'confirmed'" link type="warning" @click="openAcceptance(scope.row)">配送验收</el-button>
           </template>
         </el-table-column>

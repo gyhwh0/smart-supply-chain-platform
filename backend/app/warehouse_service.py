@@ -42,6 +42,8 @@ def requisition_query():
 def _ordered_base(requisition: PurchaseRequisition) -> dict[int, Decimal]:
     ordered = defaultdict(lambda: Decimal("0"))
     for link in requisition.order_links:
+        if link.purchase_order.status == "cancelled":
+            continue
         for item in link.purchase_order.items:
             ordered[item.product_id] += item.quantity * item.unit.conversion_rate
     return ordered
