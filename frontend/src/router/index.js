@@ -21,7 +21,7 @@ const routes = [
       { path: 'quotes', component: () => import('@/views/Quotes.vue'), meta: { permission: 'quote_management' } },
       { path: 'analysis', component: () => import('@/views/Analysis.vue'), meta: { permission: 'analysis' } },
       { path: 'orders', component: () => import('@/views/Orders.vue'), meta: { permission: 'order_management' } },
-      { path: 'smart-split', component: () => import('@/views/SmartSplit.vue'), meta: { permission: 'order_management' } },
+      { path: 'smart-split', component: () => import('@/views/SmartSplit.vue'), meta: { permission: 'smart_split_management' } },
       { path: 'supplier-orders', component: () => import('@/views/SupplierOrders.vue'), meta: { permission: 'supplier_order_view' } },
       { path: 'sales-orders', component: () => import('@/views/SalesOrders.vue'), meta: { permission: 'sales_order_management' } },
       { path: 'sales-summary', component: () => import('@/views/SalesSummary.vue'), meta: { permission: 'sales_summary' } },
@@ -81,6 +81,7 @@ router.beforeEach(async (to) => {
       ['picking_management', '/picking'],
       ['picking_monitor', '/picking-monitor'],
       ['finance_management', '/finance'],
+      ['smart_split_management', '/smart-split'],
       ['report_management', '/reports'],
       ['deletion_approval', '/deletion-approvals'],
     ]

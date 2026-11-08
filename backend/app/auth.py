@@ -25,6 +25,7 @@ ALL_PERMISSIONS = {
     "inventory",
     "inventory_update",
     "order_management",
+    "smart_split_management",
     "staff_management",
     "customer_management",
     "sales_order_management",
@@ -47,7 +48,7 @@ ROLE_PERMISSIONS = {
     "purchaser": {
         "dashboard", "account_management", "supplier_management", "category_management",
         "product_management", "assignment_management", "analysis", "inventory", "inventory_update",
-        "order_management", "staff_management", "customer_management",
+        "order_management", "smart_split_management", "staff_management", "customer_management",
         "sales_order_management", "sales_summary", "wecom_management",
         "complaint_management",
         "inbound_management", "warehouse_management", "label_printing", "picking_management", "picking_monitor",

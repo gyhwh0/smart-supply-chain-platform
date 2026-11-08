@@ -68,7 +68,7 @@ class GenerateIn(PreviewIn):
 
 @router.get("/config")
 def get_config(
-    _: User = Depends(require_permission("order_management")),
+    _: User = Depends(require_permission("smart_split_management")),
     db: Session = Depends(get_db),
 ):
     return smart_split_service.configuration(db)
@@ -78,7 +78,7 @@ def get_config(
 def save_assignment_rule(
     assignment_id: int,
     data: AssignmentRuleIn,
-    _: User = Depends(require_permission("assignment_management")),
+    _: User = Depends(require_permission("smart_split_management")),
     db: Session = Depends(get_db),
 ):
     return smart_split_service.update_assignment(db, assignment_id, data.model_dump())
@@ -88,7 +88,7 @@ def save_assignment_rule(
 def save_category_loss(
     category_id: int,
     data: CategoryLossIn,
-    _: User = Depends(require_permission("category_management")),
+    _: User = Depends(require_permission("smart_split_management")),
     db: Session = Depends(get_db),
 ):
     category = db.get(Category, category_id)
@@ -103,7 +103,7 @@ def save_category_loss(
 def save_supplier_performance(
     supplier_id: int,
     data: SupplierPerformanceIn,
-    _: User = Depends(require_permission("supplier_management")),
+    _: User = Depends(require_permission("smart_split_management")),
     db: Session = Depends(get_db),
 ):
     return smart_split_service.update_supplier_performance(db, supplier_id, data.model_dump())
@@ -112,7 +112,7 @@ def save_supplier_performance(
 @router.put("/quality-weights")
 def save_quality_weights(
     data: QualityWeightsIn,
-    _: User = Depends(require_permission("supplier_management")),
+    _: User = Depends(require_permission("smart_split_management")),
     db: Session = Depends(get_db),
 ):
     values = data.model_dump(by_alias=True)
@@ -121,7 +121,7 @@ def save_quality_weights(
 
 @router.get("/sources")
 def get_sources(
-    _: User = Depends(require_permission("order_management")),
+    _: User = Depends(require_permission("smart_split_management")),
     db: Session = Depends(get_db),
 ):
     return smart_split_service.source_options(db)
@@ -130,7 +130,7 @@ def get_sources(
 @router.post("/preview")
 def preview_split(
     data: PreviewIn,
-    _: User = Depends(require_permission("order_management")),
+    _: User = Depends(require_permission("smart_split_management")),
     db: Session = Depends(get_db),
 ):
     return smart_split_service.preview(db, data.source_type, data.source_id, data.strategy)
@@ -139,7 +139,7 @@ def preview_split(
 @router.post("/generate")
 def generate_split_orders(
     data: GenerateIn,
-    user: User = Depends(require_permission("order_management")),
+    user: User = Depends(require_permission("smart_split_management")),
     db: Session = Depends(get_db),
 ):
     return smart_split_service.generate(db, data.model_dump(), user)
@@ -147,7 +147,7 @@ def generate_split_orders(
 
 @router.get("/plans")
 def list_plans(
-    _: User = Depends(require_permission("order_management")),
+    _: User = Depends(require_permission("smart_split_management")),
     db: Session = Depends(get_db),
 ):
     return smart_split_service.plans(db)
@@ -156,7 +156,7 @@ def list_plans(
 @router.post("/plans/{plan_id}/cancel")
 def cancel_plan(
     plan_id: int,
-    _: User = Depends(require_permission("order_management")),
+    _: User = Depends(require_permission("smart_split_management")),
     db: Session = Depends(get_db),
 ):
     return smart_split_service.cancel_plan(db, plan_id)

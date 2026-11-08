@@ -37,7 +37,7 @@
           <el-menu-item v-if="can('order_management')" index="/orders"
             >采购下单</el-menu-item
           >
-          <el-menu-item v-if="can('order_management')" index="/smart-split"
+          <el-menu-item v-if="can('smart_split_management')" index="/smart-split"
             >智能拆单</el-menu-item
           >
           <el-menu-item v-if="can('supplier_order_view')" index="/supplier-orders"
@@ -159,6 +159,7 @@ const hasProcurementMenu = computed(() =>
     "quote_management",
     "analysis",
     "order_management",
+    "smart_split_management",
     "supplier_order_view",
   ].some(can),
 );

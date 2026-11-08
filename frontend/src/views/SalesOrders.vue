@@ -53,7 +53,7 @@
             <el-button v-if="scope.row.status === 'draft'" link type="success" @click="confirm(scope.row)">确认</el-button>
             <el-button link type="danger" @click="remove(scope.row)">删除</el-button>
             <el-button v-if="scope.row.status === 'confirmed' && canPurchase" link type="primary" @click="openProcurement(scope.row)">分配供应商并转采购</el-button>
-            <el-button v-if="scope.row.status === 'confirmed' && canPurchase" link type="success" @click="router.push({path:'/smart-split',query:{source:'sales',id:scope.row.id}})">智能拆单</el-button>
+            <el-button v-if="scope.row.status === 'confirmed' && canSmartSplit" link type="success" @click="router.push({path:'/smart-split',query:{source:'sales',id:scope.row.id}})">智能拆单</el-button>
             <el-button v-if="scope.row.status === 'confirmed'" link type="warning" @click="openAcceptance(scope.row)">配送验收</el-button>
           </template>
         </el-table-column>
@@ -166,6 +166,7 @@ const newLine = () => ({ product_id: null, unit_id: null, specification: '', qua
 const blank = () => ({ id: null, customer_id: null, order_date: today(), delivery_date: null, title: '销售订单', notes: '', items: [newLine()] })
 const form = reactive(blank())
 const canPurchase = computed(() => getUser()?.permissions?.includes('order_management'))
+const canSmartSplit = computed(() => getUser()?.permissions?.includes('smart_split_management'))
 const filledItems = computed(() => form.items.filter(item => item.product_id))
 const filledProductIds = computed(() => filledItems.value.map(item => item.product_id))
 const formTotal = computed(() => filledItems.value.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unit_price || 0), 0))

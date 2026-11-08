@@ -63,6 +63,7 @@ const permissionOptions = [
   { value: 'inventory', label: '库存查询', description: '查询库存数据' },
   { value: 'inventory_update', label: '库存更新', description: '上传并替换库存表' },
   { value: 'order_management', label: '采购下单', description: '创建订单与下载报表' },
+  { value: 'smart_split_management', label: '智能拆单', description: '配置供应规则并生成多供应商采购单' },
   { value: 'supplier_order_view', label: '供应商采购订单', description: '供应商查看已下达订单' },
   { value: 'staff_management', label: '分拣配送人员', description: '维护分拣员和配送员' },
   { value: 'customer_management', label: '客户管理', description: '客户及人员分配' },
@@ -81,7 +82,7 @@ const permissionOptions = [
 ]
 const roleDefaults = {
   admin: permissionOptions.filter(item => item.value !== 'finance_management').map(item => item.value),
-  purchaser: ['dashboard', 'account_management', 'supplier_management', 'category_management', 'product_management', 'assignment_management', 'analysis', 'inventory', 'inventory_update', 'order_management', 'staff_management', 'customer_management', 'sales_order_management', 'sales_summary', 'wecom_management', 'complaint_management', 'inbound_management', 'warehouse_management', 'label_printing', 'picking_management', 'picking_monitor'],
+  purchaser: ['dashboard', 'account_management', 'supplier_management', 'category_management', 'product_management', 'assignment_management', 'analysis', 'inventory', 'inventory_update', 'order_management', 'smart_split_management', 'staff_management', 'customer_management', 'sales_order_management', 'sales_summary', 'wecom_management', 'complaint_management', 'inbound_management', 'warehouse_management', 'label_printing', 'picking_management', 'picking_monitor'],
   order_clerk: ['dashboard', 'sales_order_management', 'sales_summary', 'wecom_management', 'complaint_management', 'label_printing', 'picking_management', 'picking_monitor'],
   warehouse: ['dashboard', 'inventory', 'inventory_update', 'staff_management', 'customer_management', 'inbound_management', 'warehouse_management', 'label_printing', 'picking_management', 'picking_monitor'],
   supplier: ['dashboard', 'product_management', 'quote_management', 'inventory', 'supplier_order_view'],
