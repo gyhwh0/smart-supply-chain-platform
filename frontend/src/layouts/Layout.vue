@@ -89,6 +89,9 @@
         <el-menu-item v-if="can('finance_management')" index="/finance">
           <el-icon><Wallet /></el-icon><span>财务管理</span>
         </el-menu-item>
+        <el-menu-item v-if="can('report_management')" index="/reports">
+          <el-icon><TrendCharts /></el-icon><span>报表管理</span>
+        </el-menu-item>
         <el-menu-item v-if="can('account_management')" index="/accounts"
           ><el-icon><UserFilled /></el-icon><span>账号管理</span></el-menu-item
         >

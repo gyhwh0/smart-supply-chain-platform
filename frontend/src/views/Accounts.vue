@@ -76,6 +76,7 @@ const permissionOptions = [
   { value: 'picking_management', label: '扫码分拣', description: '生成分拣任务、扫码确认和查看进度' },
   { value: 'picking_monitor', label: '分拣配送监控', description: '查看人员工作量、客户耗时和单品操作时间' },
   { value: 'finance_management', label: '财务管理', description: '查看销售、验收、开票和毛利数据' },
+  { value: 'report_management', label: '报表管理', description: '查看运营统计、利润和进销存报表' },
   { value: 'deletion_approval', label: '删除审核', description: '仅管理员可批准或驳回删除申请' },
 ]
 const roleDefaults = {

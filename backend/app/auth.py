@@ -36,6 +36,7 @@ ALL_PERMISSIONS = {
     "picking_management",
     "picking_monitor",
     "finance_management",
+    "report_management",
     "warehouse_management",
     "supplier_order_view",
     "deletion_approval",

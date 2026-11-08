@@ -36,6 +36,7 @@ const routes = [
       { path: 'picking', component: () => import('@/views/Picking.vue'), meta: { permission: 'picking_management' } },
       { path: 'picking-monitor', component: () => import('@/views/PickingMonitor.vue'), meta: { permission: 'picking_monitor' } },
       { path: 'finance', component: () => import('@/views/Finance.vue'), meta: { permission: 'finance_management' } },
+      { path: 'reports', component: () => import('@/views/ReportManagement.vue'), meta: { permission: 'report_management' } },
       { path: 'inventory-query-records', component: () => import('@/views/InventoryQueryRecords.vue'), meta: { adminOnly: true, hiddenLink: true } }
     ]
   }
@@ -79,6 +80,7 @@ router.beforeEach(async (to) => {
       ['picking_management', '/picking'],
       ['picking_monitor', '/picking-monitor'],
       ['finance_management', '/finance'],
+      ['report_management', '/reports'],
       ['deletion_approval', '/deletion-approvals'],
     ]
     return candidates.find(([permission]) => user?.permissions?.includes(permission))?.[1] || '/login'

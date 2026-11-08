@@ -26,7 +26,7 @@ from app.auth import (
 )
 from app.config import settings
 from app.database import Base, SessionLocal, engine, get_db
-from app import deletion_service, finance_router, inventory_service, picking_service, report_service, sales_order_service, sales_report_service, warehouse_service, wecom_service
+from app import deletion_service, finance_router, inventory_service, management_report_router, picking_service, report_service, sales_order_service, sales_report_service, warehouse_service, wecom_service
 from app.deletion_router import router as deletion_router
 from app.wecom_router import router as wecom_router
 from app.inbound_router import router as inbound_router
@@ -86,6 +86,7 @@ app.include_router(picking_router)
 app.include_router(warehouse_router)
 app.include_router(mini_router)
 app.include_router(finance_router.router)
+app.include_router(management_report_router.router)
 app.include_router(deletion_router)
 app.add_middleware(
     CORSMiddleware,
