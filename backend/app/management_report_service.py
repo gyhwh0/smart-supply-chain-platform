@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from io import BytesIO
 from typing import Any
@@ -14,6 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import (
+    Complaint,
     Customer,
     LogisticsStaff,
     PickingTask,
@@ -36,6 +37,7 @@ REPORTS = {
     "reconciliation": ("核单统计", "检查销售单确认、配送验收、差异与成本完整性"),
     "order_clerk": ("订单员统计", "订单员录单量、客户覆盖、加单与待处理情况"),
     "sorter": ("分拣员统计", "分拣任务、商品工作量、完成率与处理耗时"),
+    "complaints": ("投诉统计", "按日期查询投诉率、等级、处理进度与超时情况"),
     "sales_orders": ("销售订单查询", "销售单状态、金额、验收、采购及加单信息"),
     "profit_detail": ("明细利润查询", "逐订单逐商品核对销售、成本、毛利及成本来源"),
     "supplier_profit": ("供应商明细利润", "按实际关联采购单归集供应商供货成本与销售毛利"),
@@ -60,6 +62,9 @@ class ReportFilters:
     product_id: int | None = None
     category: str | None = None
     status: str | None = None
+    assignee_id: int | None = None
+    severity: str | None = None
+    complaint_category: str | None = None
     keyword: str | None = None
     page: int = 1
     page_size: int = 50
@@ -628,16 +633,121 @@ def _dashboard(orders: list[SalesOrder], lines: list[dict], db: Session, filters
             "notes": ["看板销售额与毛利采用客户验收口径；未验收订单不会提前计入实际销售。"]}
 
 
+def _complaint_report(db: Session, filters: ReportFilters) -> dict:
+    start = datetime.combine(filters.date_from, datetime.min.time())
+    end = datetime.combine(filters.date_to + timedelta(days=1), datetime.min.time())
+    statement = (
+        select(Complaint)
+        .options(
+            selectinload(Complaint.customer),
+            selectinload(Complaint.assignee),
+            selectinload(Complaint.sales_order),
+        )
+        .where(Complaint.created_at >= start, Complaint.created_at < end)
+        .order_by(Complaint.created_at.desc(), Complaint.id.desc())
+    )
+    if filters.customer_id:
+        statement = statement.where(Complaint.customer_id == filters.customer_id)
+    if filters.assignee_id:
+        statement = statement.where(Complaint.assigned_to == filters.assignee_id)
+    if filters.severity:
+        statement = statement.where(Complaint.severity == filters.severity)
+    if filters.complaint_category:
+        statement = statement.where(Complaint.category == filters.complaint_category)
+    if filters.status in {"new", "processing", "resolved", "closed"}:
+        statement = statement.where(Complaint.status == filters.status)
+
+    complaints = db.scalars(statement.limit(5000)).unique().all()
+    keyword = (filters.keyword or "").strip().lower()
+    if keyword:
+        complaints = [
+            row for row in complaints
+            if keyword in " ".join([
+                row.complaint_no,
+                row.customer.name,
+                row.sales_order.order_no if row.sales_order else "",
+                row.category,
+                row.content,
+                row.resolution or "",
+                row.assignee.name if row.assignee else "",
+            ]).lower()
+        ]
+
+    order_statement = select(func.count()).select_from(SalesOrder).where(
+        SalesOrder.order_date >= filters.date_from,
+        SalesOrder.order_date <= filters.date_to,
+    )
+    if filters.customer_id:
+        order_statement = order_statement.where(SalesOrder.customer_id == filters.customer_id)
+    order_count = db.scalar(order_statement) or 0
+    now = datetime.now()
+    resolved_statuses = {"resolved", "closed"}
+    unresolved = sum(row.status not in resolved_statuses for row in complaints)
+    resolved = len(complaints) - unresolved
+    overdue = sum(bool(row.due_at and row.due_at < now and row.status not in resolved_statuses) for row in complaints)
+    status_names = {"new": "新投诉", "processing": "处理中", "resolved": "已解决", "closed": "已关闭"}
+    rows = [
+        {
+            "complaint_no": row.complaint_no,
+            "created_at": row.created_at,
+            "customer_name": row.customer.name,
+            "sales_order_no": row.sales_order.order_no if row.sales_order else "未关联销售单",
+            "category": row.category,
+            "severity": row.severity,
+            "content": row.content,
+            "status": status_names.get(row.status, row.status),
+            "assignee_name": row.assignee.name if row.assignee else "未分配",
+            "due_at": row.due_at,
+            "sla_status": "已超时" if row.due_at and row.due_at < now and row.status not in resolved_statuses else ("已完成" if row.status in resolved_statuses else "处理中"),
+            "resolution": row.resolution or "—",
+        }
+        for row in complaints
+    ]
+    complaint_count = len(complaints)
+    return {
+        "columns": [
+            _column("complaint_no", "投诉编号", "text", 170),
+            _column("created_at", "投诉时间", "datetime", 160),
+            _column("customer_name", "客户", "text", 150),
+            _column("sales_order_no", "关联销售单", "text", 170),
+            _column("category", "投诉分类", "status", 110),
+            _column("severity", "等级", "status", 85),
+            _column("content", "投诉内容", "text", 260),
+            _column("status", "处理状态", "status", 100),
+            _column("assignee_name", "处理人", "text", 110),
+            _column("due_at", "要求完成时间", "datetime", 160),
+            _column("sla_status", "时效状态", "status", 100),
+            _column("resolution", "处理结果", "text", 220),
+        ],
+        "metrics": [
+            _metric("complaint_count", "投诉数", complaint_count, help_text="选定时间内登记的投诉记录数"),
+            _metric("order_count", "同期销售订单数", order_count, help_text="按销售单下单日期统计"),
+            _metric("complaint_rate", "投诉率", round(complaint_count / order_count * 100, 2) if order_count else 0, "percent", "投诉记录数 ÷ 同期销售订单数"),
+            _metric("affected_customers", "投诉客户数", len({row.customer_id for row in complaints})),
+            _metric("p0_count", "P0紧急投诉", sum(row.severity == "P0" for row in complaints)),
+            _metric("unresolved", "未完结", unresolved),
+            _metric("resolution_rate", "解决率", round(resolved / complaint_count * 100, 2) if complaint_count else 0, "percent"),
+            _metric("overdue", "已超时", overdue),
+        ],
+        "rows": rows,
+        "notes": [
+            "投诉率口径：选定时间内登记的投诉记录数 ÷ 同期销售订单数；同一订单多次投诉会分别计数。",
+            "投诉日期按投诉登记时间统计，销售订单数按下单日期统计；筛选客户时分子与分母会同步限定该客户。",
+        ],
+    }
+
+
 def build_report(db: Session, report_key: str, filters: ReportFilters, *, export: bool = False) -> dict:
     if report_key not in REPORTS:
         raise ValueError("未知报表类型")
-    orders = _orders(db, filters) if report_key not in {"sorter", "purchase_orders", "inventory_flow"} else []
+    orders = _orders(db, filters) if report_key not in {"sorter", "complaints", "purchase_orders", "inventory_flow"} else []
     lines = _lines(orders, filters) if orders else []
     builders = {
         "dashboard": lambda: _dashboard(orders, lines, db, filters),
         "reconciliation": lambda: _reconciliation_report(orders),
         "order_clerk": lambda: _order_clerk_report(orders),
         "sorter": lambda: _sorter_report(db, filters),
+        "complaints": lambda: _complaint_report(db, filters),
         "sales_orders": lambda: _sales_orders_report(orders),
         "profit_detail": lambda: _profit_detail(lines),
         "supplier_profit": lambda: _supplier_profit(lines),

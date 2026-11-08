@@ -25,6 +25,9 @@ def _filters(
     product_id: int | None = None,
     category: str | None = None,
     status: str | None = None,
+    assignee_id: int | None = None,
+    severity: str | None = None,
+    complaint_category: str | None = None,
     keyword: str | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=10, le=200),
@@ -43,6 +46,9 @@ def _filters(
         product_id=product_id,
         category=category,
         status=status,
+        assignee_id=assignee_id,
+        severity=severity,
+        complaint_category=complaint_category,
         keyword=keyword,
         page=page,
         page_size=page_size,
@@ -69,7 +75,7 @@ def report_catalog(
     ).all()
     categories = sorted({product.category for product in products if product.category})
     reports = [
-        {"key": key, "name": value[0], "description": value[1], "group": "运营管理" if key in {"dashboard", "reconciliation", "order_clerk", "sorter"} else "经营报表"}
+        {"key": key, "name": value[0], "description": value[1], "group": "运营管理" if key in {"dashboard", "reconciliation", "order_clerk", "sorter", "complaints"} else "经营报表"}
         for key, value in REPORTS.items()
     ]
     return {
@@ -85,6 +91,18 @@ def report_catalog(
             {"value": "confirmed", "name": "已确认"},
             {"value": "cancelled", "name": "已撤销（采购）"},
         ],
+        "complaint_statuses": [
+            {"value": "new", "name": "新投诉"},
+            {"value": "processing", "name": "处理中"},
+            {"value": "resolved", "name": "已解决"},
+            {"value": "closed", "name": "已关闭"},
+        ],
+        "complaint_severities": [
+            {"value": "P0", "name": "P0 紧急"},
+            {"value": "P1", "name": "P1 重要"},
+            {"value": "P2", "name": "P2 普通"},
+        ],
+        "complaint_categories": ["食品安全", "少货漏货", "品质问题", "重量问题", "配送延迟", "价格问题", "服务问题", "其他"],
     }
 
 

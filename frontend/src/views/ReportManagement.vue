@@ -22,11 +22,14 @@
           <el-select v-if="supports('customer_id')" v-model="filters.customer_id" placeholder="全部客户" clearable filterable><el-option v-for="item in catalog.customers" :key="item.id" :label="item.name" :value="item.id" /></el-select>
           <el-select v-if="supports('supplier_id')" v-model="filters.supplier_id" placeholder="全部供应商" clearable filterable><el-option v-for="item in catalog.suppliers" :key="item.id" :label="item.name" :value="item.id" /></el-select>
           <el-select v-if="supports('creator_id')" v-model="filters.creator_id" placeholder="全部订单员/制单人" clearable filterable><el-option v-for="item in catalog.creators" :key="item.id" :label="item.name" :value="item.id" /></el-select>
+          <el-select v-if="supports('assignee_id')" v-model="filters.assignee_id" placeholder="全部投诉处理人" clearable filterable><el-option v-for="item in catalog.creators" :key="item.id" :label="item.name" :value="item.id" /></el-select>
           <el-select v-if="supports('sorter_id')" v-model="filters.sorter_id" placeholder="全部分拣员" clearable filterable><el-option v-for="item in catalog.sorters" :key="item.id" :label="item.name" :value="item.id" /></el-select>
           <el-select v-if="supports('product_id')" v-model="filters.product_id" placeholder="全部商品" clearable filterable><el-option v-for="item in catalog.products" :key="item.id" :label="item.name" :value="item.id" /></el-select>
           <el-select v-if="supports('category')" v-model="filters.category" placeholder="全部分类" clearable><el-option v-for="item in catalog.categories" :key="item" :label="item" :value="item" /></el-select>
-          <el-select v-if="supports('status')" v-model="filters.status" placeholder="全部单据状态" clearable><el-option v-for="item in catalog.statuses" :key="item.value" :label="item.name" :value="item.value" /></el-select>
-          <el-input v-if="supports('keyword')" v-model="filters.keyword" placeholder="单号、客户、商品关键词" clearable @keyup.enter="load" />
+          <el-select v-if="supports('severity')" v-model="filters.severity" placeholder="全部投诉等级" clearable><el-option v-for="item in catalog.complaint_severities" :key="item.value" :label="item.name" :value="item.value" /></el-select>
+          <el-select v-if="supports('complaint_category')" v-model="filters.complaint_category" placeholder="全部投诉分类" clearable><el-option v-for="item in catalog.complaint_categories" :key="item" :label="item" :value="item" /></el-select>
+          <el-select v-if="supports('status')" v-model="filters.status" :placeholder="reportKey === 'complaints' ? '全部处理状态' : '全部单据状态'" clearable><el-option v-for="item in statusOptions" :key="item.value" :label="item.name" :value="item.value" /></el-select>
+          <el-input v-if="supports('keyword')" v-model="filters.keyword" :placeholder="reportKey === 'complaints' ? '投诉编号、客户、内容关键词' : '单号、客户、商品关键词'" clearable @keyup.enter="load" />
           <el-button type="primary" @click="search">查询</el-button><el-button @click="reset">重置</el-button>
         </div>
 
@@ -64,13 +67,14 @@ import { ElMessage } from 'element-plus'
 import { downloadManagementReport, getManagementReport, getReportCatalog } from '@/api'
 
 const today = () => new Date().toLocaleDateString('en-CA')
-const catalog = reactive({ reports: [], customers: [], suppliers: [], products: [], creators: [], sorters: [], categories: [], statuses: [] })
+const catalog = reactive({ reports: [], customers: [], suppliers: [], products: [], creators: [], sorters: [], categories: [], statuses: [], complaint_statuses: [], complaint_severities: [], complaint_categories: [] })
 const reportKey = ref('dashboard'), report = ref(null), loading = ref(false), exporting = ref(false)
 const dateRange = ref([today(), today()]), page = ref(1), pageSize = ref(50)
-const filters = reactive({ customer_id: null, supplier_id: null, creator_id: null, sorter_id: null, product_id: null, category: null, status: null, keyword: '' })
+const filters = reactive({ customer_id: null, supplier_id: null, creator_id: null, assignee_id: null, sorter_id: null, product_id: null, category: null, severity: null, complaint_category: null, status: null, keyword: '' })
 const filterSupport = {
   dashboard: ['customer_id','supplier_id','creator_id','sorter_id','product_id','category','keyword'], reconciliation: ['customer_id','supplier_id','creator_id','product_id','category','status','keyword'],
   order_clerk: ['customer_id','creator_id','product_id','category','status','keyword'], sorter: ['sorter_id'], sales_orders: ['customer_id','supplier_id','creator_id','product_id','category','status','keyword'],
+  complaints: ['customer_id','assignee_id','severity','complaint_category','status','keyword'],
   profit_detail: ['customer_id','supplier_id','creator_id','product_id','category','status','keyword'], supplier_profit: ['customer_id','supplier_id','creator_id','product_id','category','status','keyword'],
   purchase_orders: ['supplier_id','creator_id','product_id','category','status','keyword'], inventory_flow: ['product_id','category'], customer_profit: ['customer_id','supplier_id','creator_id','product_id','category','status','keyword'],
   product_profit: ['customer_id','supplier_id','creator_id','product_id','category','status','keyword'], adjustments: ['customer_id','creator_id','product_id','category','status','keyword'],
@@ -78,15 +82,16 @@ const filterSupport = {
 const supports = key => filterSupport[reportKey.value]?.includes(key)
 const groups = computed(() => ['运营管理', '经营报表'].map(name => ({ name, items: catalog.reports.filter(item => item.group === name) })))
 const current = computed(() => catalog.reports.find(item => item.key === reportKey.value))
+const statusOptions = computed(() => reportKey.value === 'complaints' ? catalog.complaint_statuses : catalog.statuses)
 const params = () => ({ date_from: dateRange.value[0], date_to: dateRange.value[1], page: page.value, page_size: pageSize.value, ...Object.fromEntries(Object.entries(filters).filter(([key, value]) => supports(key) && value !== null && value !== '')) })
 const load = async () => { loading.value = true; try { report.value = await getManagementReport(reportKey.value, params()) } finally { loading.value = false } }
 const search = () => { page.value = 1; load() }
 const selectReport = key => { reportKey.value = key; page.value = 1; load() }
-const reset = () => { Object.assign(filters, { customer_id: null, supplier_id: null, creator_id: null, sorter_id: null, product_id: null, category: null, status: null, keyword: '' }); dateRange.value = [today(), today()]; search() }
+const reset = () => { Object.assign(filters, { customer_id: null, supplier_id: null, creator_id: null, assignee_id: null, sorter_id: null, product_id: null, category: null, severity: null, complaint_category: null, status: null, keyword: '' }); dateRange.value = [today(), today()]; search() }
 const money = value => `¥${Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const metricValue = item => item.type === 'money' ? money(item.value) : item.type === 'percent' ? `${Number(item.value || 0).toFixed(2)}%` : Number(item.value || 0).toLocaleString('zh-CN')
-const display = (value, type) => { if (value === null || value === undefined || value === '') return '—'; if (type === 'money') return money(value); if (type === 'percent') return `${Number(value).toFixed(2)}%`; if (type === 'number') return Number(value).toLocaleString('zh-CN', { maximumFractionDigits: 4 }); return value }
-const tagType = value => String(value).includes('待') || String(value).includes('差异') || String(value).includes('未') ? 'warning' : String(value).includes('完成') || String(value).includes('确认') || String(value).includes('核清') || String(value).includes('验收') ? 'success' : 'info'
+const display = (value, type) => { if (value === null || value === undefined || value === '') return '—'; if (type === 'money') return money(value); if (type === 'percent') return `${Number(value).toFixed(2)}%`; if (type === 'number') return Number(value).toLocaleString('zh-CN', { maximumFractionDigits: 4 }); if (type === 'datetime') return new Date(value).toLocaleString('zh-CN', { hour12: false }); return value }
+const tagType = value => String(value).includes('P0') || String(value).includes('超时') ? 'danger' : String(value).includes('待') || String(value).includes('差异') || String(value).includes('未') || String(value).includes('新投诉') ? 'warning' : String(value).includes('完成') || String(value).includes('解决') || String(value).includes('关闭') || String(value).includes('确认') || String(value).includes('核清') || String(value).includes('验收') ? 'success' : 'info'
 const download = async () => { exporting.value = true; try { const blob = await downloadManagementReport(reportKey.value, params()); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `${report.value?.title || '经营报表'}_${dateRange.value[0]}_${dateRange.value[1]}.xlsx`; link.click(); URL.revokeObjectURL(url); ElMessage.success('Excel 已生成') } finally { exporting.value = false } }
 onMounted(async () => { Object.assign(catalog, await getReportCatalog()); await load() })
 </script>
