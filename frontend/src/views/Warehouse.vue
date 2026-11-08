@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="page-header"><div><h2>仓库管理</h2><p>进货自动入库、分拣自动备货、装车自动出库，领料和临时调整可人工登记</p></div><div class="actions"><el-button v-for="type in createTypes" :key="type.value" :type="type.button" @click="openCreate(type.value)">新增{{type.label}}</el-button></div></div>
+    <div class="page-header"><div><h2>仓库管理</h2><p>进货自动入库、分拣自动备货、装车自动出库，领料和临时调整可人工登记</p></div><div class="actions"><el-button type="danger" plain @click="$router.push('/inventory-counts')">库存盘点</el-button><el-button v-for="type in createTypes" :key="type.value" :type="type.button" @click="openCreate(type.value)">新增{{type.label}}</el-button></div></div>
     <el-alert type="info" :closable="false" show-icon title="这里是业务库存台账，与上传 Excel 的“智能库存查询”相互独立；联动单据自动记账，避免重复计算。"/>
     <div class="metrics"><el-card><span>台账商品</span><b>{{summary.product_count}}</b></el-card><el-card><span>可用库存合计</span><b>{{number(summary.available_total)}}</b></el-card><el-card><span>备货占用商品</span><b class="warning">{{summary.reserved_count}}</b></el-card><el-card><span>负可用库存</span><b class="danger">{{summary.negative_count}}</b></el-card></div>
 

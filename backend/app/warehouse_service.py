@@ -119,6 +119,13 @@ def replace_items(document: WarehouseDocument, rows: list[dict], db: Session):
             product_id=product.id, unit_id=unit.id, quantity=quantity,
             base_quantity=quantity * unit.conversion_rate,
             batch_no=(row.get("batch_no") or "").strip() or None,
+            location=(row.get("location") or product.default_location or "").strip() or None,
+            production_date=row.get("production_date"),
+            shelf_life_days=row.get("shelf_life_days") or product.shelf_life_days,
+            unit_cost_base=(Decimal(str(row["unit_price"])) / unit.conversion_rate) if row.get("unit_price") is not None else (
+                Decimal(unit.reference_purchase_price) / unit.conversion_rate if unit.reference_purchase_price is not None else None
+            ),
+            supplier_id=row.get("supplier_id"),
             remark=(row.get("remark") or "").strip() or None,
         ))
 
@@ -162,7 +169,9 @@ def sync_receipt(db: Session, receipt: GoodsReceipt):
         target_name=receipt.supplier.name, warehouse=receipt.warehouse,
         notes="进货单确认后自动入库",
         rows=[{"product_id": i.product_id, "unit_id": i.unit_id, "quantity": i.quantity,
-               "batch_no": i.batch_no, "remark": i.remark} for i in receipt.items],
+               "unit_price": i.unit_price, "supplier_id": receipt.supplier_id,
+               "batch_no": i.batch_no, "production_date": i.production_date,
+               "shelf_life_days": i.shelf_life_days, "remark": i.remark} for i in receipt.items],
     )
 
 

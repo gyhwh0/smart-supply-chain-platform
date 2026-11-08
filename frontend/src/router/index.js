@@ -33,6 +33,7 @@ const routes = [
       { path: 'inventory', component: () => import('@/views/Inventory.vue'), meta: { permission: 'inventory' } },
       { path: 'inbound', component: () => import('@/views/Inbound.vue'), meta: { permission: 'inbound_management' } },
       { path: 'warehouse', component: () => import('@/views/Warehouse.vue'), meta: { permission: 'warehouse_management' } },
+      { path: 'inventory-counts', component: () => import('@/views/InventoryCounts.vue'), meta: { permission: 'warehouse_management' } },
       { path: 'label-printing', component: () => import('@/views/LabelPrinting.vue'), meta: { permission: 'label_printing' } },
       { path: 'picking', component: () => import('@/views/Picking.vue'), meta: { permission: 'picking_management' } },
       { path: 'picking-monitor', component: () => import('@/views/PickingMonitor.vue'), meta: { permission: 'picking_monitor' } },

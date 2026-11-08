@@ -84,6 +84,7 @@
         <el-sub-menu v-if="can('warehouse_management') || can('inbound_management') || can('label_printing') || can('picking_management') || can('picking_monitor')" index="warehouse-business">
           <template #title><el-icon><Box /></el-icon><span>仓库管理</span></template>
           <el-menu-item v-if="can('warehouse_management')" index="/warehouse">库存台账</el-menu-item>
+          <el-menu-item v-if="can('warehouse_management')" index="/inventory-counts">库存盘点</el-menu-item>
           <el-menu-item v-if="can('inbound_management')" index="/inbound">进货与退货</el-menu-item>
           <el-menu-item v-if="can('label_printing')" index="/label-printing">标签打印</el-menu-item>
           <el-menu-item v-if="can('picking_management')" index="/picking">扫码分拣</el-menu-item>

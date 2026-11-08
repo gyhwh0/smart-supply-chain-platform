@@ -77,6 +77,7 @@ const filterSupport = {
   complaints: ['customer_id','assignee_id','severity','complaint_category','status','keyword'],
   profit_detail: ['customer_id','supplier_id','creator_id','product_id','category','status','keyword'], supplier_profit: ['customer_id','supplier_id','creator_id','product_id','category','status','keyword'],
   purchase_orders: ['supplier_id','creator_id','product_id','category','status','keyword'], inventory_flow: ['product_id','category'], customer_profit: ['customer_id','supplier_id','creator_id','product_id','category','status','keyword'],
+  inventory_count_difference: ['product_id','category'], inventory_loss: ['product_id','category'], inventory_count_efficiency: [],
   product_profit: ['customer_id','supplier_id','creator_id','product_id','category','status','keyword'], adjustments: ['customer_id','creator_id','product_id','category','status','keyword'],
 }
 const supports = key => filterSupport[reportKey.value]?.includes(key)

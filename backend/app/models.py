@@ -79,6 +79,9 @@ class Product(Base):
     image_content_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     mini_visible: Mapped[bool] = mapped_column(Boolean, default=True)
     mini_all_customers: Mapped[bool] = mapped_column(Boolean, default=False)
+    abc_level: Mapped[str] = mapped_column(String(1), default="B")
+    batch_management: Mapped[bool] = mapped_column(Boolean, default=False)
+    default_location: Mapped[str | None] = mapped_column(String(100), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     units: Mapped[list["ProductUnit"]] = relationship(
@@ -346,11 +349,84 @@ class WarehouseDocumentItem(Base):
     quantity: Mapped[Decimal] = mapped_column(Numeric(12, 4))
     base_quantity: Mapped[Decimal] = mapped_column(Numeric(14, 4))
     batch_no: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    location: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    production_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    shelf_life_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    unit_cost_base: Mapped[Decimal | None] = mapped_column(Numeric(14, 6), nullable=True)
+    supplier_id: Mapped[int | None] = mapped_column(ForeignKey("suppliers.id"), nullable=True)
     remark: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     document: Mapped[WarehouseDocument] = relationship(back_populates="items")
     product: Mapped[Product] = relationship()
     unit: Mapped[ProductUnit] = relationship()
+
+
+class InventoryCount(Base):
+    __tablename__ = "inventory_counts"
+
+    count_no: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    warehouse: Mapped[str] = mapped_column(String(100), default="主仓库", index=True)
+    count_type: Mapped[str] = mapped_column(String(20), default="full")
+    planned_start: Mapped[datetime] = mapped_column(DateTime)
+    planned_end: Mapped[datetime] = mapped_column(DateTime)
+    responsible_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    participant_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scope_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    difference_threshold: Mapped[Decimal] = mapped_column(Numeric(7, 3), default=5)
+    status: Mapped[str] = mapped_column(String(20), default="draft", index=True)
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    responsible: Mapped[User] = relationship(foreign_keys=[responsible_id])
+    creator: Mapped[User] = relationship(foreign_keys=[created_by])
+    items: Mapped[list["InventoryCountItem"]] = relationship(
+        back_populates="count", cascade="all, delete-orphan", order_by="InventoryCountItem.id"
+    )
+
+
+class InventoryCountItem(Base):
+    __tablename__ = "inventory_count_items"
+
+    count_id: Mapped[int] = mapped_column(ForeignKey("inventory_counts.id"), index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
+    unit_id: Mapped[int] = mapped_column(ForeignKey("product_units.id"))
+    batch_no: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    location: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    production_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    shelf_life_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    batch_status: Mapped[str] = mapped_column(String(20), default="normal")
+    assigned_user_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    system_qty_base: Mapped[Decimal] = mapped_column(Numeric(14, 4), default=0)
+    first_count_qty_base: Mapped[Decimal | None] = mapped_column(Numeric(14, 4), nullable=True)
+    recount_qty_base: Mapped[Decimal | None] = mapped_column(Numeric(14, 4), nullable=True)
+    final_qty_base: Mapped[Decimal | None] = mapped_column(Numeric(14, 4), nullable=True)
+    avg_cost_base: Mapped[Decimal] = mapped_column(Numeric(14, 6), default=0)
+    difference_qty_base: Mapped[Decimal] = mapped_column(Numeric(14, 4), default=0)
+    difference_amount: Mapped[Decimal] = mapped_column(Numeric(14, 4), default=0)
+    difference_rate: Mapped[Decimal] = mapped_column(Numeric(9, 4), default=0)
+    difference_reason: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    reason_note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    recount_required: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    counted_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    counted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    count: Mapped[InventoryCount] = relationship(back_populates="items")
+    product: Mapped[Product] = relationship()
+    unit: Mapped[ProductUnit] = relationship()
+    counter: Mapped[User | None] = relationship(foreign_keys=[counted_by])
+
+
+class InventoryCountLog(Base):
+    __tablename__ = "inventory_count_logs"
+
+    count_id: Mapped[int] = mapped_column(ForeignKey("inventory_counts.id"), index=True)
+    item_id: Mapped[int | None] = mapped_column(ForeignKey("inventory_count_items.id"), nullable=True)
+    action: Mapped[str] = mapped_column(String(30))
+    operator_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    detail_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    operator: Mapped[User] = relationship()
 
 
 class PurchaseRequisition(Base):

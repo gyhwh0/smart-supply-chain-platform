@@ -1,5 +1,5 @@
 from decimal import Decimal
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -369,6 +369,36 @@ class WarehouseDocumentIn(BaseModel):
     target_name: str | None = None
     notes: str | None = None
     items: list[WarehouseDocumentItemIn] = Field(min_length=1)
+
+
+class InventoryCountCreate(BaseModel):
+    warehouse: str = "主仓库"
+    count_type: str = "full"
+    planned_start: datetime
+    planned_end: datetime
+    responsible_id: int
+    participant_ids: list[int] = Field(default_factory=list)
+    difference_threshold: Decimal = Field(default=5, ge=0, le=100)
+    scope: dict = Field(default_factory=dict)
+
+
+class InventoryCountItemEntry(BaseModel):
+    id: int
+    actual_quantity: Decimal = Field(ge=0)
+    batch_no: str | None = None
+    production_date: date | None = None
+    shelf_life_days: int | None = Field(default=None, ge=1)
+    difference_reason: str | None = None
+    reason_note: str | None = None
+
+
+class InventoryCountEntries(BaseModel):
+    items: list[InventoryCountItemEntry] = Field(min_length=1)
+
+
+class InventoryRecountIn(BaseModel):
+    item_ids: list[int] = Field(min_length=1)
+    assigned_user_ids: list[int] = Field(default_factory=list)
 
 
 class PickingGenerateIn(BaseModel):

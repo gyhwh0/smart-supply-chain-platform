@@ -26,7 +26,7 @@ from app.auth import (
 )
 from app.config import settings
 from app.database import Base, SessionLocal, engine, get_db
-from app import deletion_service, finance_router, inventory_service, management_report_router, picking_service, report_service, sales_order_service, sales_report_service, smart_split_router, warehouse_service, wecom_service
+from app import deletion_service, finance_router, inventory_service, management_report_router, picking_service, product_import_router, report_service, sales_order_service, sales_report_service, smart_split_router, warehouse_service, wecom_service
 from app.deletion_router import router as deletion_router
 from app.wecom_router import router as wecom_router
 from app.inbound_router import router as inbound_router
@@ -88,6 +88,7 @@ app.include_router(mini_router)
 app.include_router(finance_router.router)
 app.include_router(management_report_router.router)
 app.include_router(smart_split_router.router)
+app.include_router(product_import_router.router)
 app.include_router(deletion_router)
 app.add_middleware(
     CORSMiddleware,
@@ -138,6 +139,9 @@ def startup():
             # schema migration. Newly created products still use the model/schema
             # default (False) and must be explicitly allocated.
             "mini_all_customers": "BOOLEAN NOT NULL DEFAULT 1",
+            "abc_level": "VARCHAR(1) NOT NULL DEFAULT 'B'",
+            "batch_management": "BOOLEAN NOT NULL DEFAULT 0",
+            "default_location": "VARCHAR(100) NULL",
         },
         "suppliers": {
             "on_time_rate": "DECIMAL(6,2) NOT NULL DEFAULT 100",
@@ -175,6 +179,13 @@ def startup():
         "product_units": {
             "sales_price": "DECIMAL(12,4) NULL",
             "reference_purchase_price": "DECIMAL(12,4) NULL",
+        },
+        "warehouse_document_items": {
+            "location": "VARCHAR(100) NULL",
+            "production_date": "DATE NULL",
+            "shelf_life_days": "INTEGER NULL",
+            "unit_cost_base": "DECIMAL(14,6) NULL",
+            "supplier_id": "INTEGER NULL",
         },
         "wecom_customer_bindings": {
             "wechat_name": "VARCHAR(100) NULL",

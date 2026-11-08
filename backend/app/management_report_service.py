@@ -15,6 +15,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models import (
     Complaint,
+    InventoryCount,
+    InventoryCountItem,
     Customer,
     LogisticsStaff,
     PickingTask,
@@ -43,6 +45,9 @@ REPORTS = {
     "supplier_profit": ("供应商明细利润", "按实际关联采购单归集供应商供货成本与销售毛利"),
     "purchase_orders": ("采购订单信息查询", "采购单、供应商、金额、最优价和销售来源"),
     "inventory_flow": ("进销存表", "按基础单位统计期初、入库、出库、领料和期末库存"),
+    "inventory_count_difference": ("盘点差异汇总表", "按仓库、分类和商品统计盘盈盘亏数量、金额与库存准确率"),
+    "inventory_loss": ("商品损耗分析表", "按商品统计盘点损耗数量、金额、损耗率及高损耗排名"),
+    "inventory_count_efficiency": ("盘点效率统计表", "统计盘点人员工作量、耗时、差异率与复盘情况"),
     "customer_profit": ("客户利润表", "按客户统计验收销售额、成本、毛利与毛利率"),
     "product_profit": ("商品利润表", "按商品统计验收数量、销售额、成本和毛利"),
     "adjustments": ("加减单统计表", "加单与实配/验收减量分开统计，避免口径混淆"),
@@ -737,10 +742,48 @@ def _complaint_report(db: Session, filters: ReportFilters) -> dict:
     }
 
 
+def _count_items(db: Session, filters: ReportFilters):
+    start=datetime.combine(filters.date_from,datetime.min.time());end=datetime.combine(filters.date_to+timedelta(days=1),datetime.min.time())
+    statement=select(InventoryCountItem).join(InventoryCount).options(
+        selectinload(InventoryCountItem.product),selectinload(InventoryCountItem.counter),selectinload(InventoryCountItem.count)
+    ).where(InventoryCount.status=="confirmed",InventoryCount.completed_at>=start,InventoryCount.completed_at<end)
+    if filters.product_id: statement=statement.where(InventoryCountItem.product_id==filters.product_id)
+    rows=db.scalars(statement.limit(10000)).unique().all()
+    if filters.category: rows=[row for row in rows if row.product.category==filters.category]
+    return rows
+
+
+def _inventory_count_difference(db:Session,filters:ReportFilters)->dict:
+    items=_count_items(db,filters);groups=defaultdict(lambda:{"system":Decimal("0"),"final":Decimal("0"),"gain":Decimal("0"),"loss":Decimal("0"),"amount":Decimal("0"),"rows":0})
+    for item in items:
+        key=(item.count.warehouse,item.product.category,item.product.name,item.product.sku or "") ;g=groups[key];g["system"]+=item.system_qty_base;g["final"]+=item.final_qty_base or 0;g["gain"]+=max(Decimal("0"),item.difference_qty_base);g["loss"]+=max(Decimal("0"),-item.difference_qty_base);g["amount"]+=item.difference_amount;g["rows"]+=1
+    rows=[]
+    for key,g in groups.items():
+        diff=g["gain"]+g["loss"];rows.append({"warehouse":key[0],"category":key[1],"product_name":key[2],"sku":key[3],"system_quantity":_number(g["system"]),"final_quantity":_number(g["final"]),"gain_quantity":_number(g["gain"]),"loss_quantity":_number(g["loss"]),"difference_amount":_money(g["amount"]),"difference_rate":round(float(diff/abs(g["system"])*100),2) if g["system"] else (100 if diff else 0)})
+    total=len(items);diff_count=sum(bool(i.difference_qty_base) for i in items)
+    return {"columns":[_column("warehouse","仓库"),_column("category","分类"),_column("sku","编码"),_column("product_name","商品",width=170),_column("system_quantity","账面数","number"),_column("final_quantity","实盘数","number"),_column("gain_quantity","盘盈","number"),_column("loss_quantity","盘亏","number"),_column("difference_amount","差异金额","money"),_column("difference_rate","差异率","percent")],"metrics":[_metric("counted","盘点批次项",total),_metric("difference","差异项",diff_count),_metric("accuracy","库存准确率",round((1-diff_count/total)*100,2) if total else 100,"percent"),_metric("net_amount","净差异金额",_money(sum((i.difference_amount for i in items),Decimal("0"))),"money")],"rows":sorted(rows,key=lambda r:abs(r["difference_amount"]),reverse=True),"notes":["差异金额使用盘点快照时的移动加权平均成本；库存准确率=无差异批次项÷全部盘点批次项。"]}
+
+
+def _inventory_loss(db:Session,filters:ReportFilters)->dict:
+    items=[i for i in _count_items(db,filters) if i.difference_qty_base<0];groups=defaultdict(lambda:{"system":Decimal("0"),"loss":Decimal("0"),"amount":Decimal("0"),"times":0})
+    for i in items:g=groups[(i.product.category,i.product.name,i.product.sku or "")];g["system"]+=i.system_qty_base;g["loss"]+=-i.difference_qty_base;g["amount"]+=abs(i.difference_amount);g["times"]+=1
+    rows=[{"category":k[0],"product_name":k[1],"sku":k[2],"loss_quantity":_number(g["loss"]),"loss_amount":_money(g["amount"]),"loss_rate":round(float(g["loss"]/abs(g["system"])*100),2) if g["system"] else 100,"occurrences":g["times"]} for k,g in groups.items()]
+    return {"columns":[_column("category","分类"),_column("sku","编码"),_column("product_name","商品",width=180),_column("loss_quantity","盘亏数量","number"),_column("loss_amount","损耗金额","money"),_column("loss_rate","损耗率","percent"),_column("occurrences","发生次数","number")],"metrics":[_metric("products","损耗商品",len(rows)),_metric("loss_amount","损耗总额",_money(sum((abs(i.difference_amount) for i in items),Decimal("0"))),"money")],"rows":sorted(rows,key=lambda r:r["loss_amount"],reverse=True),"notes":["当前损耗分析基于已确认盘点中的盘亏；差异原因可区分正常损耗、错发漏发、过期报损等。"]}
+
+
+def _inventory_count_efficiency(db:Session,filters:ReportFilters)->dict:
+    items=_count_items(db,filters);groups=defaultdict(lambda:{"items":0,"diff":0,"recount":0,"seconds":0})
+    for i in items:
+        name=i.counter.name if i.counter else "未记录人员";g=groups[name];g["items"]+=1;g["diff"]+=bool(i.difference_qty_base);g["recount"]+=i.recount_qty_base is not None
+        if i.counted_at:g["seconds"]+=max(0,(i.counted_at-i.count.created_at).total_seconds())
+    rows=[{"counter_name":name,"item_count":g["items"],"difference_count":g["diff"],"difference_rate":round(g["diff"]/g["items"]*100,2) if g["items"] else 0,"recount_count":g["recount"],"avg_seconds":round(g["seconds"]/g["items"],1) if g["items"] else 0} for name,g in groups.items()]
+    return {"columns":[_column("counter_name","盘点人员",width=140),_column("item_count","盘点项数","number"),_column("difference_count","差异项","number"),_column("difference_rate","差异率","percent"),_column("recount_count","复盘项","number"),_column("avg_seconds","平均每项耗时(秒)","number",150)],"metrics":[_metric("people","参与人数",len(rows)),_metric("items","盘点项数",len(items))],"rows":sorted(rows,key=lambda r:r["item_count"],reverse=True),"notes":["平均耗时从盘点单创建到该人员最后保存该项计算；后续移动端独立开始/结束事件接入后可进一步精确到纯作业时长。"]}
+
+
 def build_report(db: Session, report_key: str, filters: ReportFilters, *, export: bool = False) -> dict:
     if report_key not in REPORTS:
         raise ValueError("未知报表类型")
-    orders = _orders(db, filters) if report_key not in {"sorter", "complaints", "purchase_orders", "inventory_flow"} else []
+    orders = _orders(db, filters) if report_key not in {"sorter", "complaints", "purchase_orders", "inventory_flow", "inventory_count_difference", "inventory_loss", "inventory_count_efficiency"} else []
     lines = _lines(orders, filters) if orders else []
     builders = {
         "dashboard": lambda: _dashboard(orders, lines, db, filters),
@@ -748,6 +791,9 @@ def build_report(db: Session, report_key: str, filters: ReportFilters, *, export
         "order_clerk": lambda: _order_clerk_report(orders),
         "sorter": lambda: _sorter_report(db, filters),
         "complaints": lambda: _complaint_report(db, filters),
+        "inventory_count_difference": lambda: _inventory_count_difference(db, filters),
+        "inventory_loss": lambda: _inventory_loss(db, filters),
+        "inventory_count_efficiency": lambda: _inventory_count_efficiency(db, filters),
         "sales_orders": lambda: _sales_orders_report(orders),
         "profit_detail": lambda: _profit_detail(lines),
         "supplier_profit": lambda: _supplier_profit(lines),
