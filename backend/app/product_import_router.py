@@ -49,6 +49,12 @@ FIELD_DEFS = {
     "unit2_sales_price": ("辅助单位1销售价", "number", False, ["单位1售价"]), "unit2_purchase_price": ("辅助单位1参考进价", "number", False, ["单位1进价"]),
     "unit3_name": ("辅助单位2", "text", False, ["副单位2", "销售单位2"]), "unit3_rate": ("辅助单位2换算率", "number", False, ["换算率2", "单位2比例"]),
     "unit3_sales_price": ("辅助单位2销售价", "number", False, ["单位2售价"]), "unit3_purchase_price": ("辅助单位2参考进价", "number", False, ["单位2进价"]),
+    "unit4_name": ("辅助单位3", "text", False, ["副单位3", "销售单位3"]), "unit4_rate": ("辅助单位3换算率", "number", False, ["换算率3", "单位3比例"]),
+    "unit4_sales_price": ("辅助单位3销售价", "number", False, ["单位3售价"]), "unit4_purchase_price": ("辅助单位3参考进价", "number", False, ["单位3进价"]),
+    "unit5_name": ("辅助单位4", "text", False, ["副单位4", "销售单位4"]), "unit5_rate": ("辅助单位4换算率", "number", False, ["换算率4", "单位4比例"]),
+    "unit5_sales_price": ("辅助单位4销售价", "number", False, ["单位4售价"]), "unit5_purchase_price": ("辅助单位4参考进价", "number", False, ["单位4进价"]),
+    "unit6_name": ("辅助单位5", "text", False, ["副单位5", "销售单位5"]), "unit6_rate": ("辅助单位5换算率", "number", False, ["换算率5", "单位5比例"]),
+    "unit6_sales_price": ("辅助单位5销售价", "number", False, ["单位5售价"]), "unit6_purchase_price": ("辅助单位5参考进价", "number", False, ["单位5进价"]),
     "supplier1": ("供应商1", "text", False, ["主供应商", "供应商"]), "supplier1_price": ("供应商1供货价", "number", False, ["主供应商报价", "供货价"]),
     "supplier1_moq": ("供应商1起订量", "number", False, ["起订量"]), "supplier1_daily_capacity": ("供应商1日最大供货量", "number", False, ["日最大供货量"]),
     "supplier1_order_capacity": ("供应商1单订单最大量", "number", False, ["单订单最大量"]), "supplier1_priority": ("供应商1优先级", "integer", False, ["供应商优先级"]),
@@ -59,16 +65,6 @@ FIELD_DEFS = {
     "initial_quantity": ("期初库存数量", "number", False, ["初始库存", "期初数量"]), "initial_cost": ("期初单位成本", "number", False, ["期初成本", "初始成本"]),
     "initial_batch": ("期初批次号", "text", False, ["批次号", "批号"]), "production_date": ("生产日期", "date", False, ["生产日"]),
     "description": ("商品说明", "text", False, ["描述", "备注"]), "active": ("启用状态", "bool", False, ["是否启用", "状态"]), "mini_visible": ("小程序上架", "bool", False, ["是否上架", "商城上架"]),
-}
-
-INDUSTRIES = {
-    "vegetable": ("蔬菜", ["sku","name","category","base_unit","aliases","origin","grade","abc_level","loss_rate","shelf_life_days","storage_temperature_min","storage_temperature_max","default_location","sales_price","reference_purchase_price","supplier1"]),
-    "fruit": ("水果", ["sku","name","category","base_unit","brand","origin","grade","specification","abc_level","shelf_life_days","storage_temperature_min","storage_temperature_max","sales_price","reference_purchase_price","supplier1"]),
-    "meat": ("肉类", ["sku","barcode","name","category","base_unit","origin","grade","batch_management","slaughter_batch","traceability_code","shelf_life_days","storage_temperature_min","storage_temperature_max","sales_price","reference_purchase_price","supplier1","supplier1_price"]),
-    "aquatic": ("水产", ["sku","name","category","base_unit","origin","grade","aquatic_state","batch_management","traceability_code","shelf_life_days","storage_temperature_min","storage_temperature_max","sales_price","reference_purchase_price","supplier1"]),
-    "grain": ("粮油干货", ["sku","barcode","name","category","base_unit","brand","specification","origin","batch_management","shelf_life_days","default_location","unit2_name","unit2_rate","sales_price","reference_purchase_price","supplier1"]),
-    "seasoning": ("调味品", ["sku","barcode","name","category","base_unit","brand","specification","batch_management","shelf_life_days","storage_notes","sales_price","vip_sales_price","reference_purchase_price","supplier1"]),
-    "frozen": ("冻品", ["sku","barcode","name","category","base_unit","brand","specification","fresh_attribute","batch_management","traceability_code","shelf_life_days","storage_temperature_min","storage_temperature_max","sales_price","reference_purchase_price","supplier1"]),
 }
 
 def _norm(v): return re.sub(r"[\s_\-（）()/%℃]", "", str(v or "").strip().lower())
@@ -82,6 +78,12 @@ def _decimal(v):
 def _integer(v):
     n=_decimal(v);return None if n is None else int(n)
 def _json(v): return json.dumps(v,ensure_ascii=False,default=str)
+def _aliases(v):
+    result=[];seen=set()
+    for item in re.split(r"[,，]",str(v or "")):
+        item=item.strip();key=item.casefold()
+        if item and key not in seen:seen.add(key);result.append(item)
+    return result
 def _signature(headers): return hashlib.sha256("|".join(_norm(h) for h in headers).encode()).hexdigest()
 def _field_options(): return [{"key":k,"label":m[0],"type":m[1],"required":m[2]} for k,m in FIELD_DEFS.items()]
 
@@ -97,14 +99,17 @@ def _style(ws,widths=None):
     ws.freeze_panes="A2";ws.auto_filter.ref=ws.dimensions;ws.row_dimensions[1].height=36
     for i in range(1,ws.max_column+1):ws.column_dimensions[ws.cell(1,i).column_letter].width=(widths or {}).get(i,18)
 
-def _template(keys,industry=None):
+def _template(keys):
     wb=Workbook();ws=wb.active;ws.title="商品导入";ws.append([FIELD_DEFS[k][0]+("*" if FIELD_DEFS[k][2] else "") for k in keys])
-    ex={"sku":"SP001","barcode":"690000000001","name":"示例商品","category":industry or "蔬菜","base_unit":"斤","aliases":"别名1,别名2","brand":"示例品牌","specification":"500g/袋","origin":"广东","grade":"一级","abc_level":"A","batch_management":"是","default_location":"A-01","shelf_life_days":7,"storage_temperature_min":0,"storage_temperature_max":8,"loss_rate":3,"traceability_code":"TRACE001","fresh_attribute":"冷藏","slaughter_batch":"需录入屠宰批次","aquatic_state":"冰鲜","inventory_min":10,"inventory_max":500,"sales_price":8.8,"vip_sales_price":8.5,"key_account_sales_price":8.2,"min_sales_price":7.8,"max_sales_price":10,"reference_purchase_price":6,"unit2_name":"箱","unit2_rate":20,"unit2_sales_price":176,"unit2_purchase_price":120,"supplier1":"示例供应商","supplier1_price":6,"supplier1_moq":20,"supplier1_daily_capacity":500,"supplier1_order_capacity":300,"supplier1_priority":1,"supplier1_tiers":"100:5.8;300:5.5","initial_quantity":100,"initial_cost":6,"initial_batch":"QC20261108","production_date":date.today(),"active":"是","mini_visible":"否"}
+    ex={"sku":"SP001","barcode":"690000000001","name":"金典有机纯牛奶梦幻盖","category":"乳制品类","base_unit":"盒","aliases":"金典牛奶，梦幻盖牛奶, 有机纯牛奶，金典牛奶","brand":"金典","specification":"250ml/盒","origin":"中国","grade":"一级","abc_level":"A","batch_management":"是","default_location":"A-01","shelf_life_days":180,"storage_temperature_min":0,"storage_temperature_max":25,"loss_rate":1,"traceability_code":"TRACE001","fresh_attribute":"常温","inventory_min":10,"inventory_max":500,"sales_price":7,"vip_sales_price":6.8,"key_account_sales_price":6.5,"min_sales_price":6,"max_sales_price":8,"reference_purchase_price":5.5,"unit2_name":"件","unit2_rate":10,"unit2_sales_price":68,"unit2_purchase_price":55,"unit3_name":"箱","unit3_rate":20,"unit3_sales_price":136,"unit3_purchase_price":110,"supplier1":"示例供应商","supplier1_price":5.5,"supplier1_moq":20,"supplier1_daily_capacity":500,"supplier1_order_capacity":300,"supplier1_priority":1,"supplier1_tiers":"100:5.3;300:5.1","initial_quantity":100,"initial_cost":5.5,"initial_batch":"QC20261108","production_date":date.today(),"active":"是","mini_visible":"否"}
     ws.append([ex.get(k) for k in keys]);_style(ws)
     info=wb.create_sheet("字段说明");info.append(["字段","必填","格式与业务规则","常见列名"])
     for k in keys:
-        label,kind,required,aliases=FIELD_DEFS[k];rule={"number":"数值，不得为负数","integer":"整数，不得为负数","bool":"是/否、启用/停用、1/0","date":"Excel日期或YYYY-MM-DD","text":"文本"}[kind];info.append([label,"是" if required else "否",rule,"、".join(aliases)])
-    _style(info,{1:24,2:10,3:36,4:42});guide=wb.create_sheet("导入说明");guide.append(["步骤","说明"]);guide.append([1,"上传后先检查字段映射和三级校验结果。"]);guide.append([2,"确认预览后才会写入商品、供应商和库存台账。"]);guide.append([3,"阶梯价格式：100:5.8;300:5.5。"]);_style(guide,{1:12,2:80})
+        label,kind,required,aliases=FIELD_DEFS[k];rule={"number":"数值，不得为负数；换算率必须大于0","integer":"整数，不得为负数","bool":"是/否、启用/停用、1/0","date":"Excel日期或YYYY-MM-DD","text":"文本"}[kind]
+        if k=="aliases":rule="多个别名用英文逗号或中文逗号分隔；导入自动去空格、去重"
+        if k=="base_unit":rule="每个商品只能有一个基础单位；所有辅助单位均换算到此单位"
+        info.append([label,"是" if required else "否",rule,"、".join(aliases)])
+    _style(info,{1:24,2:10,3:52,4:42});guide=wb.create_sheet("导入说明");guide.append(["步骤","说明"]);guide.append([1,"一行代表一个商品；可在同一行填写基础单位和最多5个辅助单位。"]);guide.append([2,"换算率表示1个辅助单位包含多少个基础单位，例如基础单位=盒，1件=10盒，则填10。"]);guide.append([3,"别名支持中英文逗号混用，系统自动去空格、去重；导入后可用于商品搜索和下单匹配。"]);guide.append([4,"上传后先检查字段映射和三级校验结果，确认预览后才会写入数据库。"]);guide.append([5,"供应商阶梯价格式：100:5.8;300:5.5。"]);_style(guide,{1:12,2:100})
     stream=BytesIO();wb.save(stream);stream.seek(0);return stream
 
 def _read(path):
@@ -155,8 +160,13 @@ def _validate(rows,mode,db):
                 if n<0:raise ValueError("不能为负数")
                 row[k]=int(n) if FIELD_DEFS[k][1]=="integer" else str(n)
             except Exception as exc:bad.append(_err(line,FIELD_DEFS[k][0],"field",str(exc),"填写大于或等于0的数字"))
-        for name,rate in [("unit2_name","unit2_rate"),("unit3_name","unit3_rate")]:
+        unit_names=[str(row.get("base_unit") or "").strip().casefold()]
+        for index in range(2,7):
+            name,rate=f"unit{index}_name",f"unit{index}_rate"
             if row.get(name) and (_blank(row.get(rate)) or Decimal(str(row.get(rate) or 0))<=0):bad.append(_err(line,FIELD_DEFS[rate][0],"business","辅助单位换算率必须大于0","填写正确换算比例"))
+            if row.get(name):unit_names.append(str(row[name]).strip().casefold())
+        populated=[value for value in unit_names if value]
+        if len(populated)!=len(set(populated)):bad.append(_err(line,"单位","business","基础单位与辅助单位存在重复","每个商品只能有一个基础单位，且单位名称不能重复"))
         if row.get("min_sales_price") is not None and row.get("max_sales_price") is not None and Decimal(str(row["min_sales_price"]))>Decimal(str(row["max_sales_price"])):bad.append(_err(line,"最低/最高售价","business","最低售价高于最高售价","调整价格区间"))
         if row.get("inventory_min") is not None and row.get("inventory_max") is not None and Decimal(str(row["inventory_min"]))>Decimal(str(row["inventory_max"])):bad.append(_err(line,"库存上下限","business","库存下限高于上限","调整库存区间"))
         if _yes(row.get("batch_management")) and _blank(row.get("shelf_life_days")):bad.append(_err(line,"保质期天数","business","批次商品未填写保质期","补充效期参数"))
@@ -170,15 +180,11 @@ def _job(job):return {"id":job.id,"job_no":job.job_no,"filename":job.filename,"m
 
 @router.get("/config")
 def config(_:User=Depends(require_permission("product_management")),db:Session=Depends(get_db)):
-    mappings=db.scalars(select(ProductImportMapping).where(ProductImportMapping.active.is_(True)).order_by(ProductImportMapping.id.desc())).all();return {"fields":_field_options(),"industries":[{"key":k,"name":v[0]} for k,v in INDUSTRIES.items()],"mappings":[{"id":m.id,"name":m.name,"signature":m.header_signature,"mapping":json.loads(m.mapping_json)} for m in mappings]}
+    mappings=db.scalars(select(ProductImportMapping).where(ProductImportMapping.active.is_(True)).order_by(ProductImportMapping.id.desc())).all();return {"fields":_field_options(),"mappings":[{"id":m.id,"name":m.name,"signature":m.header_signature,"mapping":json.loads(m.mapping_json)} for m in mappings]}
 
 @router.get("/template")
-def template(template_type:str="full",industry:str|None=None,_:User=Depends(require_permission("product_management"))):
-    if template_type=="industry":
-        if industry not in INDUSTRIES:raise HTTPException(400,"行业模板不存在")
-        name,keys=INDUSTRIES[industry]
-    else:name="全字段";keys=list(FIELD_DEFS)
-    return StreamingResponse(_template(keys,name),media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",headers={"Content-Disposition":f'attachment; filename="product-template-{industry or "full"}.xlsx"'})
+def template(_:User=Depends(require_permission("product_management"))):
+    return StreamingResponse(_template(list(FIELD_DEFS)),media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",headers={"Content-Disposition":'attachment; filename="product-import-template.xlsx"'})
 
 @router.get("/export")
 def export_products(_:User=Depends(require_permission("product_management")),db:Session=Depends(get_db)):
@@ -186,7 +192,7 @@ def export_products(_:User=Depends(require_permission("product_management")),db:
     for p in products:
         base=next((u for u in p.units if u.is_base),p.units[0] if p.units else None);extras=[u for u in p.units if not u.is_base];links=[a for a in p.assignments if a.active]
         v={"sku":p.sku,"barcode":p.barcode,"name":p.name,"category":p.category,"base_unit":base.name if base else None,"aliases":",".join(p.aliases),"brand":p.brand,"specification":p.specification,"origin":p.origin,"grade":p.grade,"abc_level":p.abc_level,"batch_management":"是" if p.batch_management else "否","default_location":p.default_location,"shelf_life_days":p.shelf_life_days,"storage_temperature_min":p.storage_temperature_min,"storage_temperature_max":p.storage_temperature_max,"loss_rate":p.loss_rate,"storage_notes":p.storage_notes,"traceability_code":p.traceability_code,"fresh_attribute":p.fresh_attribute,"slaughter_batch":p.slaughter_batch,"aquatic_state":p.aquatic_state,"inventory_min":p.inventory_min,"inventory_max":p.inventory_max,"sales_price":base.sales_price if base else None,"vip_sales_price":base.vip_sales_price if base else None,"key_account_sales_price":base.key_account_sales_price if base else None,"min_sales_price":base.min_sales_price if base else None,"max_sales_price":base.max_sales_price if base else None,"reference_purchase_price":base.reference_purchase_price if base else None,"description":p.description,"active":"是" if p.active else "否","mini_visible":"是" if p.mini_visible else "否"}
-        for i,u in enumerate(extras[:2],2):v.update({f"unit{i}_name":u.name,f"unit{i}_rate":u.conversion_rate,f"unit{i}_sales_price":u.sales_price,f"unit{i}_purchase_price":u.reference_purchase_price})
+        for i,u in enumerate(extras[:5],2):v.update({f"unit{i}_name":u.name,f"unit{i}_rate":u.conversion_rate,f"unit{i}_sales_price":u.sales_price,f"unit{i}_purchase_price":u.reference_purchase_price})
         for i,a in enumerate(links[:2],1):
             quote=next((q for q in a.quotes if base and q.unit_id==base.id),None);tiers=";".join(f"{tier.min_base_quantity}:{tier.base_unit_price}" for tier in a.tier_prices)
             v.update({f"supplier{i}":a.supplier.name,f"supplier{i}_price":quote.price if quote else None,f"supplier{i}_moq":a.min_order_base,f"supplier{i}_daily_capacity":a.daily_capacity_base,f"supplier{i}_order_capacity":a.order_capacity_base,f"supplier{i}_priority":a.priority,f"supplier{i}_tiers":tiers})
@@ -263,7 +269,7 @@ def commit(job_id:int,user:User=Depends(require_permission("product_management")
                 if k in row:_set(p,k,str(row[k]).strip() if not _blank(row[k]) else None,mode)
             if "name" in row and not _blank(row["name"]):p.name=str(row["name"]).strip()
             if "category" in row and not _blank(row["category"]):c=categories[str(row["category"]).strip()];p.category=c.name;p.category_id=c.id
-            if "aliases" in row:_set(p,"aliases_json",_json([v.strip() for v in str(row.get("aliases") or "").replace("，",",").split(",") if v.strip()]),mode)
+            if "aliases" in row:_set(p,"aliases_json",_json(_aliases(row.get("aliases"))),mode)
             if row.get("abc_level"):p.abc_level=str(row["abc_level"]).strip().upper()
             for k in ["shelf_life_days","storage_temperature_min","storage_temperature_max","loss_rate","inventory_min","inventory_max"]:
                 if k in row:_set(p,k,_integer(row[k]) if k=="shelf_life_days" else _decimal(row[k]),mode)
@@ -275,7 +281,7 @@ def commit(job_id:int,user:User=Depends(require_permission("product_management")
                 if new and base_name:base.name=base_name
                 for k in ["sales_price","vip_sales_price","key_account_sales_price","min_sales_price","max_sales_price","reference_purchase_price"]:
                     if k in row:_set(base,k,_decimal(row[k]),mode)
-            for i in [2,3]:
+            for i in range(2,7):
                 name=str(row.get(f"unit{i}_name") or "").strip()
                 if not name:continue
                 unit=next((u for u in p.units if u.name==name),None)
@@ -323,9 +329,18 @@ def batch_adjust(job_id:int,payload:dict,user:User=Depends(require_permission("p
     if len(suppliers)!=len(set(supplier_ids)):raise HTTPException(400,"供应商不存在或已停用")
     percent=_decimal(payload.get("sales_price_percent"))
     if percent is not None and percent<=0:raise HTTPException(400,"调价百分比必须大于0")
+    category_rules=[]
+    for rule in payload.get("category_rules") or []:
+        keyword=str(rule.get("keyword") or "").strip().lower();target=db.get(Category,rule.get("category_id")) if rule.get("category_id") else None
+        if keyword and (not target or not target.active):raise HTTPException(400,f"关键词“{keyword}”对应的分类不存在或已停用")
+        if keyword:category_rules.append((keyword,target))
     changed=0
     for product in products:
         if category:product.category_id=category.id;product.category=category.name
+        else:
+            searchable=" ".join([product.name,product.sku or "",*product.aliases]).lower()
+            matched=next((target for keyword,target in category_rules if keyword in searchable),None)
+            if matched:product.category_id=matched.id;product.category=matched.name
         if payload.get("active") is not None:product.active=bool(payload["active"])
         if payload.get("inventory_min") is not None:product.inventory_min=_decimal(payload["inventory_min"])
         if payload.get("inventory_max") is not None:product.inventory_max=_decimal(payload["inventory_max"])
@@ -340,7 +355,7 @@ def batch_adjust(job_id:int,payload:dict,user:User=Depends(require_permission("p
         for supplier in suppliers:
             if supplier.id not in current:product.assignments.append(ProductSupplier(supplier_id=supplier.id,assigned_by=user.id,active=True,split_enabled=True))
         changed+=1
-    adjustments=summary.get("batch_adjustments") or [];adjustments.append({"at":datetime.now().isoformat(),"operator":user.name,"count":changed,"category_id":category_id,"supplier_ids":supplier_ids,"sales_price_percent":str(percent) if percent is not None else None});summary["batch_adjustments"]=adjustments[-20:];job.summary_json=_json(summary);db.commit()
+    adjustments=summary.get("batch_adjustments") or [];adjustments.append({"at":datetime.now().isoformat(),"operator":user.name,"count":changed,"category_id":category_id,"category_rules":[{"keyword":k,"category_id":c.id} for k,c in category_rules],"supplier_ids":supplier_ids,"sales_price_percent":str(percent) if percent is not None else None});summary["batch_adjustments"]=adjustments[-20:];job.summary_json=_json(summary);db.commit()
     return {"message":f"已批量整理 {changed} 个商品","changed":changed}
 
 @router.get("/jobs")
